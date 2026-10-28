@@ -7,8 +7,45 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_SECTION
 import requests
 
-APP_NAME = "MEMOIRE CORRECTEUR PRO gloss"
-st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
+APP_NAME = "CORRECTGLOSS"
+APP_DIR = Path(__file__).resolve().parent
+LOGO_PATH = APP_DIR / "correctgloss_icon.png"
+BRAND_PATH = APP_DIR / "correctgloss_brand.png"
+st.set_page_config(
+    page_title="CORRECTGLOSS | Correcteur de mémoire",
+    page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "✅",
+    layout="wide",
+)
+
+# Palette CORRECTGLOSS : bleu nuit, turquoise et or.
+st.markdown("""
+<style>
+:root { --cg-navy: #092B52; --cg-teal: #13B8A6; --cg-gold: #F6BE32; }
+[data-testid="stAppViewContainer"] { background: #F6F9FC; }
+[data-testid="stHeader"] { background: rgba(246,249,252,0.92); }
+[data-testid="stSidebar"] { background: #EAF4F7; }
+h1, h2, h3 { color: #092B52; }
+[data-testid="stCaptionContainer"] { color: #456176; }
+div.stButton > button[kind="primary"] { background: #13B8A6; border-color: #13B8A6; color: white; }
+div.stButton > button[kind="primary"]:hover { background: #0E9F91; border-color: #0E9F91; color: white; }
+[data-testid="stMetricValue"] { color: #092B52; }
+</style>
+""", unsafe_allow_html=True)
+
+def render_brand_header(subtitle):
+    logo_col, title_col = st.columns([1, 5])
+    with logo_col:
+        if LOGO_PATH.exists():
+            st.image(str(LOGO_PATH), width=92)
+        elif BRAND_PATH.exists():
+            st.image(str(BRAND_PATH), width=92)
+    with title_col:
+        st.markdown(
+            '<h1 style="margin-bottom:0; color:#092B52;">CORRECT<span style="color:#13B8A6;">GLOSS</span></h1>',
+            unsafe_allow_html=True,
+        )
+        st.caption(subtitle)
+
 
 # Protection facultative pour les déploiements web : définir APP_PASSWORD
 # dans les variables d'environnement ou dans les secrets Streamlit.
@@ -23,8 +60,7 @@ def _configured_password():
 
 APP_PASSWORD = _configured_password()
 if APP_PASSWORD and not st.session_state.get("authenticated", False):
-    st.title("📘 MEMOIRE CORRECTEUR PRO gloss")
-    st.caption("Application de correction et de mise en page de mémoires universitaires")
+    render_brand_header("Correcteur de mémoire universitaire")
     password_entered = st.text_input("Mot de passe d'accès", type="password")
     if st.button("Se connecter", type="primary"):
         if hmac.compare_digest(password_entered, APP_PASSWORD):
@@ -34,8 +70,7 @@ if APP_PASSWORD and not st.session_state.get("authenticated", False):
             st.error("Mot de passe incorrect.")
     st.stop()
 
-st.title("📘 MEMOIRE CORRECTEUR PRO gloss")
-st.caption("Correction • reformulation académique • mise en page • contrôle des citations")
+render_brand_header("Correction • reformulation académique • mise en page • contrôle des citations")
 if not APP_PASSWORD:
     st.caption("Pour une mise en ligne, configurez APP_PASSWORD dans les secrets Streamlit avant de partager l’adresse.")
 st.info("Prototype local/web. Conservez toujours une copie originale. Les vérifications bibliographiques sont des contrôles de cohérence, pas une preuve que chaque source existe.")
@@ -276,4 +311,4 @@ if st.session_state.get("formatted_pdf"):
     st.download_button("⬇️ Télécharger le mémoire mis en page (.pdf)", st.session_state["formatted_pdf"], file_name="memoire_mis_en_page.pdf", mime="application/pdf")
 
 st.markdown("---")
-st.caption("MEMOIRE CORRECTEUR PRO gloss — version 0.2 • Traitez les résultats comme des suggestions, pas comme une validation académique.")
+st.caption("CORRECTGLOSS — version 0.3 • Traitez les résultats comme des suggestions, pas comme une validation académique.")
