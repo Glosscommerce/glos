@@ -20,7 +20,7 @@ def log_app_event(event_type):
         requests.post(f"{url}/rest/v1/app_events",
             headers={"apikey": anon, "Authorization": f"Bearer {anon}",
                      "Content-Type": "application/json", "Prefer": "return=minimal"},
-            json={"event_type": event_type}, timeout=5).raise_for_status()
+            json={"event_name": event_type, "app_version": "0.4"}, timeout=5).raise_for_status()
     except Exception:
         pass
 
