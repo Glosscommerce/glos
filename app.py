@@ -3,7 +3,8 @@ import io, os, re, json, tempfile, subprocess, shutil, hmac
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from docx.oxml.ns import qnfrom pathlib import Path
+from docx.oxml.ns import qn
+from pathlib import Path
 import streamlit as st
 from docx import Document
 from docx.shared import Inches, Pt
