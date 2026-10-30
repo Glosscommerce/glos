@@ -1,5 +1,6 @@
-import io, os, re, json, tempfile, subprocess, shutil, hmac
-from pathlib import Path
+import requestsimport io, os, re, json, tempfile, subprocess, shutil, hmac
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qnfrom pathlib import Path
 import streamlit as st
 from docx import Document
 from docx.shared import Inches, Pt
@@ -7,7 +8,32 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_SECTION
 import requests
 
-APP_NAME = "CORRECTGLOSS"
+def log_event(event_name):("app_opened")("docx_export_prepared")
+  ("document_analyzed")  """Enregistre uniquement le type d'événement, jamais le texte du document."""
+    try:
+        supabase_url = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
+        supabase_key = str(st.secrets.get("SUPABASE_ANON_KEY", "")).strip()
+
+        if not supabase_url or not supabase_key:
+            return
+
+        response = requests.post(
+            f"{supabase_url}/rest/v1/app_events",
+            headers={
+                "apikey": supabase_key,
+                "Authorization": f"Bearer {supabase_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+            json={
+                "event_name": event_name,
+                "app_version": "0.4"
+            },
+            timeout=8
+        )
+        response.raise_for_status()
+    except Exception:
+        passAPP_NAME = "CORRECTGLOSS""CORRECTGLOSS"
 APP_DIR = Path(__file__).resolve().parent
 LOGO_PATH = APP_DIR / "correctgloss_icon.png"
 BRAND_PATH = APP_DIR / "correctgloss_brand.png"
@@ -70,7 +96,7 @@ if APP_PASSWORD and not st.session_state.get("authenticated", False):
             st.error("Mot de passe incorrect.")
     st.stop()
 
-render_brand_header("Correction • reformulation académique • mise en page • contrôle des citations")
+render_brand_header("Correction • reformulation académique • mise en page • contrôle des citations")("Correction • reformulation académique • mise en page • contrôle des citations")
 if not APP_PASSWORD:
     st.caption("Pour une mise en ligne, configurez APP_PASSWORD dans les secrets Streamlit avant de partager l’adresse.")
 st.info("Prototype local/web. Conservez toujours une copie originale. Les vérifications bibliographiques sont des contrôles de cohérence, pas une preuve que chaque source existe.")
@@ -173,7 +199,52 @@ def citations_and_bibliography(document):
             missing.append(f"{author} ({year})")
     return refs, matched, missing
 
-def format_document(document):
+  """Ajoute un champ Table des matières Word actualisable."""
+    title = document.add_paragraph()
+    title.style = "Title"
+    title.add_run("TABLE DES MATIÈRES")
+
+    paragraph = document.add_paragraph()
+
+    run = paragraph.add_run()
+    begin = OxmlElement("w:fldChar")
+    begin.set(qn("w:fldCharType"), "begin")
+
+    instruction = OxmlElement("w:instrText")
+    instruction.set(qn("xml:space"), "preserve")
+    instruction.text = ' TOC \\o "1-3" \\h \\z \\u '
+
+    separate = OxmlElement("w:fldChar")
+    separate.set(qn("w:fldCharType"), "separate")
+
+    text = OxmlElement("w:t")
+    text.text = "Ouvrez dans Word et actualisez la table des matières."
+
+    end = OxmlElement("w:fldChar")
+    end.set(qn("w:fldCharType"), "end")
+
+    run._r.append(begin)
+    run._r.append(instruction)
+    run._r.append(separate)
+    run._r.append(text)
+    run._r.append(end)
+
+    body = document._body._body
+    body.remove(title._p)
+    body.remove(paragraph._p)
+    body.insert(0, paragraph._p)
+    body.insert(0, title._p)
+
+    settings = document.settings.element
+    update_fields = settings.find(qn("w:updateFields"))
+
+    if update_fields is None:
+        update_fields = OxmlElement("w:updateFields")
+        settings.append(update_fields)
+
+    update_fields.set(qn("w:val"), "true")
+
+    return documentdef format_document(document):
     for sec in document.sections:
         sec.top_margin = Inches(margin_cm / 2.54)
         sec.bottom_margin = Inches(margin_cm / 2.54)
@@ -231,7 +302,7 @@ if st.button("Analyser le mémoire", type="primary"):
                 st.warning(f"LanguageTool indisponible : {e}. Les contrôles locaux restent disponibles.")
     st.session_state["suggestions"] = all_suggestions
     st.session_state["refs_result"] = citations_and_bibliography(doc)
-    st.session_state["analysis_done"] = True
+    st.session_state["analysis_done"] = True["analysis_done"] = True
 
 if st.session_state.get("analysis_done"):
     suggestions = st.session_state.get("suggestions", [])
@@ -279,11 +350,13 @@ st.markdown("---")
 st.markdown("### 5. Export et mise en page")
 st.write("Le fichier exporté est une copie formatée du document original. Les corrections de langue sont présentées sous forme de suggestions et ne sont pas injectées automatiquement.")
 if st.button("Appliquer la mise en page et préparer le DOCX", type="primary"):
-    formatted = Document(io.BytesIO(original_bytes))
-    formatted = format_document(formatted)
-    out = io.BytesIO()
+   formatted = Document(io.BytesIO(original_bytes))
+formatted = format_document(formatted)
+formatted = add_word_toc(formatted)
+
+out = io.BytesIO()
     formatted.save(out)
-    st.session_state["formatted_docx"] = out.getvalue()
+    st.session_state["formatted_docx"] = out.getvalue()["formatted_docx"] = out.getvalue()
     st.success("Mise en page appliquée.")
 if st.session_state.get("formatted_docx"):
     st.download_button("⬇️ Télécharger le mémoire mis en page (.docx)", st.session_state["formatted_docx"], file_name="memoire_mis_en_page.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
