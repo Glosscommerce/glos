@@ -13,14 +13,15 @@ from docx.enum.section import WD_SECTION
 import requests
 
 def log_event(event_name):("app_opened")("docx_export_prepared")
-  ("document_analyzed")  """Enregistre uniquement le type d'événement, jamais le texte du document."""
+APP_NAME = "CORRECTGLOSS"
+
+def log_event(event_name):
+    """Enregistre uniquement le type d'événement, jamais le texte du document."""
     try:
         supabase_url = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
         supabase_key = str(st.secrets.get("SUPABASE_ANON_KEY", "")).strip()
-
         if not supabase_url or not supabase_key:
             return
-
         response = requests.post(
             f"{supabase_url}/rest/v1/app_events",
             headers={
@@ -29,14 +30,12 @@ def log_event(event_name):("app_opened")("docx_export_prepared")
                 "Content-Type": "application/json",
                 "Prefer": "return=minimal",
             },
-            json={
-                "event_name": event_name,
-                "app_version": "0.4"
-            },
+            json={"event_name": event_name, "app_version": "0.4"},
             timeout=8
         )
         response.raise_for_status()
     except Exception:
+        pass
         passAPP_NAME = "CORRECTGLOSS""CORRECTGLOSS"
 APP_DIR = Path(__file__).resolve().parent
 LOGO_PATH = APP_DIR / "correctgloss_icon.png"
