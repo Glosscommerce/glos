@@ -36,3 +36,123 @@ def search_web(query: str, max_results: int = 8):
             "snippet": body[:1200],
         })
     return cleaned
+
+
+def search_bibliography(topic: str, max_results: int = 8):
+    """Trouve des références bibliographiques via OpenAlex, Crossref et Open Library."""
+    import requests
+
+    topic = (topic or "").strip()
+    if len(topic) < 3:
+        raise ValueError("Saisissez un thème d'au moins 3 caractères.")
+    limit = max(1, min(int(max_results), 10))
+    headers = {"User-Agent": "CORRECTGLOSS/1.0 (academic reference discovery)"}
+    output = {"Articles scientifiques": [], "Livres": [], "Auteurs et chercheurs": []}
+    seen = set()
+
+    # OpenAlex : articles, chapitres, livres académiques et auteurs associés.
+    try:
+        response = requests.get(
+            "https://api.openalex.org/works",
+            params={"search": topic, "per-page": limit, "select":
+                    "id,display_name,publication_year,type,doi,authorships,primary_location"},
+            headers=headers, timeout=20,
+        )
+        response.raise_for_status()
+        for work in response.json().get("results", []):
+            title = (work.get("display_name") or "").strip()
+            if not title:
+                continue
+            authors = []
+            for authorship in work.get("authorships", [])[:5]:
+                author = (authorship.get("author") or {}).get("display_name")
+                if author and author not in authors:
+                    authors.append(author)
+            location = work.get("primary_location") or {}
+            source = location.get("landing_page_url") or work.get("doi") or work.get("id")
+            kind = (work.get("type") or "").lower()
+            category = "Livres" if kind in {"book", "monograph"} else "Articles scientifiques"
+            key = (category, title.lower())
+            if key not in seen:
+                seen.add(key)
+                output[category].append({
+                    "title": title, "year": work.get("publication_year"),
+                    "authors": authors, "url": source, "type": work.get("type", "publication"),
+                    "provider": "OpenAlex",
+                })
+            for author in authors:
+                if author.lower() not in {x["name"].lower() for x in output["Auteurs et chercheurs"]}:
+                    output["Auteurs et chercheurs"].append({
+                        "name": author, "url": work.get("id"), "provider": "OpenAlex"
+                    })
+    except requests.RequestException:
+        pass
+
+    # Crossref : références de revues et publications avec métadonnées.
+    try:
+        response = requests.get(
+            "https://api.crossref.org/works",
+            params={"query.bibliographic": topic, "rows": limit},
+            headers=headers, timeout=20,
+        )
+        response.raise_for_status()
+        for item in response.json().get("message", {}).get("items", []):
+            title = ((item.get("title") or [""])[0] or "").strip()
+            if not title:
+                continue
+            authors = [
+                " ".join(filter(None, [a.get("given"), a.get("family")])).strip()
+                for a in item.get("author", [])[:5]
+            ]
+            authors = [a for a in authors if a]
+            url = item.get("URL") or item.get("DOI")
+            key = ("Articles scientifiques", title.lower())
+            if key not in seen:
+                seen.add(key)
+                output["Articles scientifiques"].append({
+                    "title": title, "year": (item.get("published", {}).get("date-parts") or [[None]])[0][0],
+                    "authors": authors, "url": url, "type": item.get("type", "publication"),
+                    "provider": "Crossref",
+                })
+            for author in authors:
+                if author.lower() not in {x["name"].lower() for x in output["Auteurs et chercheurs"]}:
+                    output["Auteurs et chercheurs"].append({
+                        "name": author, "url": url, "provider": "Crossref"
+                    })
+    except (requests.RequestException, ValueError, TypeError, IndexError):
+        pass
+
+    # Open Library : catalogues de livres, avec lien vers la notice.
+    try:
+        response = requests.get(
+            "https://openlibrary.org/search.json",
+            params={"q": topic, "limit": limit, "fields": "title,author_name,first_publish_year,key"},
+            headers=headers, timeout=20,
+        )
+        response.raise_for_status()
+        for item in response.json().get("docs", []):
+            title = (item.get("title") or "").strip()
+            if not title:
+                continue
+            authors = item.get("author_name", [])[:5]
+            key = ("Livres", title.lower())
+            if key not in seen:
+                seen.add(key)
+                output["Livres"].append({
+                    "title": title, "year": item.get("first_publish_year"),
+                    "authors": authors, "url": "https://openlibrary.org" + item.get("key", ""),
+                    "type": "book", "provider": "Open Library",
+                })
+            for author in authors:
+                if author.lower() not in {x["name"].lower() for x in output["Auteurs et chercheurs"]}:
+                    output["Auteurs et chercheurs"].append({
+                        "name": author, "url": "https://openlibrary.org" + item.get("key", ""),
+                        "provider": "Open Library"
+                    })
+    except requests.RequestException:
+        pass
+
+    for category in ("Articles scientifiques", "Livres"):
+        output[category] = output[category][:limit]
+    output["Auteurs et chercheurs"] = output["Auteurs et chercheurs"][:limit * 2]
+    return output
