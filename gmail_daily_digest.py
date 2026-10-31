@@ -42,7 +42,17 @@ def main():
         },
         timeout=30,
     )
-    response.raise_for_status()
+    if not response.ok:
+        # Show Supabase's diagnostic response without exposing request headers
+        # or any secret key in the GitHub Actions log.
+        try:
+            detail = response.json()
+        except ValueError:
+            detail = response.text[:1500]
+        raise RuntimeError(
+            f"Supabase API error ({response.status}): {detail}"
+        )
+
     events = response.json()
 
     counts = {}
