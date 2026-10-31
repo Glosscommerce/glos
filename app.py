@@ -5,6 +5,7 @@ from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import requests
+from research_engine import search_web
 
 APP_NAME = "Mémoire Correcteur Pro"
 st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
@@ -85,6 +86,104 @@ def show_admin_dashboard():
     except Exception as e:
         st.error(f"Impossible de charger les statistiques : {e}")
 
+def show_research_page():
+    st.header("🌐 Recherche Internet & rédaction")
+    st.write("Recherchez des informations, consultez les sources, puis préparez un brouillon à vérifier.")
+
+    query = st.text_input(
+        "Sujet de recherche",
+        placeholder="Ex. : La compétitivité du girofle malgache à l'exportation",
+        max_chars=300,
+    )
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        max_results = st.selectbox("Nombre de sources", [5, 8, 10], index=1)
+    with col2:
+        research_language = st.selectbox("Langue des résultats", ["Français", "Anglais"], index=0)
+
+    if st.button("🔎 Rechercher sur Internet", type="primary"):
+        if not query.strip():
+            st.warning("Saisissez d'abord un sujet.")
+        else:
+            search_query = query if research_language == "Français" else f"{query} English"
+            try:
+                with st.spinner("Recherche des sources en cours..."):
+                    found = search_web(search_query, max_results=max_results)
+                st.session_state["cg_research_query"] = query
+                st.session_state["cg_research_results"] = found
+                log_app_event("web_research")
+            except Exception as exc:
+                st.error(f"Recherche indisponible : {exc}")
+                st.info("Réessayez plus tard ou vérifiez votre connexion Internet.")
+
+    sources = st.session_state.get("cg_research_results", [])
+    if sources:
+        st.subheader(f"Sources trouvées : {len(sources)}")
+        for index, source in enumerate(sources, start=1):
+            st.markdown(f"**[{index}] [{source['title']}]({source['url']})**")
+            if source["snippet"]:
+                st.write(source["snippet"])
+            st.caption(source["url"])
+
+        st.warning("Les résultats et extraits sont des pistes. Ouvrez les liens, vérifiez l'auteur, la date et le contenu avant toute citation académique.")
+
+        st.subheader("✍️ Préparer une rédaction")
+        draft_type = st.selectbox(
+            "Type de rédaction",
+            ["Plan détaillé", "Introduction", "Synthèse documentaire", "Développement", "Conclusion", "Résumé"],
+        )
+        extra_instructions = st.text_area(
+            "Consignes complémentaires (facultatif)",
+            placeholder="Ex. : niveau Master, contexte de Madagascar, problématique...",
+            height=90,
+        )
+        if st.button("Générer un brouillon avec les sources"):
+            api_key = secret_value("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY", "")
+            if not api_key:
+                st.error("La clé OPENAI_API_KEY doit être configurée dans les secrets Streamlit.")
+            else:
+                try:
+                    from openai import OpenAI
+                    source_context = "\n\n".join(
+                        f"[{i}] {item['title']}\nURL: {item['url']}\nExtrait: {item['snippet']}"
+                        for i, item in enumerate(sources, start=1)
+                    )
+                    prompt = f"""Tu es un assistant de recherche et de rédaction académique.
+Sujet : {st.session_state.get('cg_research_query', query)}
+Type demandé : {draft_type}
+Consignes : {extra_instructions or 'Rédaction claire et structurée en français.'}
+
+Utilise uniquement les informations présentes dans les extraits ci-dessous.
+N'invente aucun fait, chiffre, auteur, date ou référence. Si les extraits ne suffisent pas,
+signale les informations manquantes. Place des appels de source [1], [2] dans le texte
+uniquement lorsque l'extrait correspondant les soutient. Termine par une section
+« Sources à vérifier » reprenant les URL fournies. Précise qu'il s'agit d'un brouillon
+et que les pages originales doivent être consultées.
+
+SOURCES :
+{source_context}
+"""
+                    client = OpenAI(api_key=api_key)
+                    with st.spinner("Préparation du brouillon..."):
+                        response = client.responses.create(
+                            model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
+                            input=prompt,
+                        )
+                    st.session_state["cg_research_draft"] = response.output_text
+                    log_app_event("research_draft_generated")
+                except Exception as exc:
+                    st.error(f"Impossible de générer le brouillon : {exc}")
+
+    if st.session_state.get("cg_research_draft"):
+        st.text_area("Brouillon à relire et vérifier", st.session_state["cg_research_draft"], height=420)
+        st.download_button(
+            "Télécharger le brouillon (.txt)",
+            st.session_state["cg_research_draft"],
+            file_name="correctgloss_brouillon_recherche.txt",
+            mime="text/plain",
+        )
+
+
 def detect_and_style_headings(document):
     for para in document.paragraphs:
         value = para.text.strip()
@@ -128,7 +227,7 @@ def add_word_toc(document):
     return document
 
 with st.sidebar:
-    page = st.radio("Navigation", ["Correction", "Dashboard administrateur"])
+    page = st.radio("Navigation", ["Correction", "Recherche & rédaction", "Dashboard administrateur"])
     st.header("Paramètres")
     mode = st.radio("Mode de correction", ["Hors ligne", "En ligne (LanguageTool)"])
     language = st.selectbox("Langue", ["Français", "Anglais", "Malagasy"])
