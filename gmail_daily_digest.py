@@ -29,9 +29,10 @@ def main():
 
     response = requests.get(
         f"{supabase_url}/rest/v1/app_events",
+        # Supabase API keys (especially the new sb_secret_* keys) belong
+        # in the apikey header. They are not JWTs, so do not send them as Bearer.
         headers={
             "apikey": service_key,
-            "Authorization": f"Bearer {service_key}",
         },
         params={
             "select": "event_name,app_version,created_at",
