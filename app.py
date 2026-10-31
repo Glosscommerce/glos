@@ -241,6 +241,10 @@ if page == "Dashboard administrateur":
     show_admin_dashboard()
     st.stop()
 
+if page == "Recherche & rédaction":
+    show_research_page()
+    st.stop()
+
 uploaded = st.file_uploader("Importer un mémoire Word (.docx)", type=["docx"])
 if not uploaded:
     st.info("Importez un document Word pour lancer les contrôles.")
