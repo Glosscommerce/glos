@@ -5,7 +5,7 @@ from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import requests
-from research_engine import search_web
+from research_engine import search_web, search_bibliography
 
 APP_NAME = "Mémoire Correcteur Pro"
 st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
@@ -115,6 +115,42 @@ def show_research_page():
             except Exception as exc:
                 st.error(f"Recherche indisponible : {exc}")
                 st.info("Réessayez plus tard ou vérifiez votre connexion Internet.")
+
+    st.divider()
+    st.subheader("📚 Auteurs, livres et documents académiques")
+    st.write("Trouvez des références bibliographiques, des articles scientifiques, des livres, des mémoires et des thèses liés à votre thème.")
+    if st.button("📖 Rechercher des auteurs, livres et documents"):
+        if len(query.strip()) < 3:
+            st.warning("Saisissez d'abord un thème de recherche.")
+        else:
+            try:
+                with st.spinner("Recherche des références bibliographiques..."):
+                    bibliography = search_bibliography(query, max_results=max_results)
+                st.session_state["cg_bibliography"] = bibliography
+                log_app_event("bibliography_search")
+            except Exception as exc:
+                st.error(f"Recherche bibliographique indisponible : {exc}")
+
+    bibliography = st.session_state.get("cg_bibliography", {})
+    for category in ["Auteurs et chercheurs", "Livres", "Articles scientifiques", "Documents, mémoires et thèses"]:
+        entries = bibliography.get(category, [])
+        st.markdown(f"**{category} ({len(entries)})**")
+        if not entries:
+            st.caption("Aucun résultat trouvé pour cette catégorie.")
+        for item in entries:
+            title = item.get("title") or item.get("name") or "Référence sans titre"
+            url = item.get("url")
+            st.markdown(f"- **[{title}]({url})**" if url else f"- **{title}**")
+            if item.get("authors"):
+                st.caption("Auteur(s) : " + ", ".join(item["authors"]))
+            if item.get("year"):
+                st.caption(f"Année : {item['year']}")
+            if item.get("snippet"):
+                st.write(item["snippet"])
+            st.caption("Source : " + item.get("provider", "Catalogue en ligne"))
+
+    if bibliography:
+        st.warning("Vérifiez toujours l'existence du livre ou document, son édition, son auteur et son contenu avant de le citer dans votre mémoire.")
 
     sources = st.session_state.get("cg_research_results", [])
     if sources:
