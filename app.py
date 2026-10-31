@@ -6,6 +6,7 @@ from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import requests
 from research_engine import search_web, search_bibliography
+from correction_engine import offline_suggestions, languagetool_suggestions, apply_suggestions
 
 APP_NAME = "Mémoire Correcteur Pro"
 st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
@@ -332,48 +333,58 @@ text = "\n\n".join(p for p in paragraphs if p.strip())
 st.success(f"Document chargé : {len(paragraphs)} paragraphes • {len(doc.tables)} tableaux")
 st.text_area("Aperçu", "\n\n".join([p for p in paragraphs if p.strip()][:8]), height=220)
 
-def offline_suggestions(content):
-    rules = [
-        (r"\bmalgré que\b", "bien que / malgré le fait que", "Formulation à vérifier."),
-        (r"\bau jour d'aujourd'hui\b", "aujourd'hui / à ce jour", "Redondance."),
-        (r"\btrès important\b", "essentiel / majeur / déterminant", "Préciser le sens."),
-        (r"\bon peut voir que\b", "les résultats montrent que", "Style académique."),
-        (r"\bje pense que\b", "les données suggèrent que", "Éviter une opinion non justifiée."),
-    ]
-    found = []
-    for pattern, suggestion, note in rules:
-        for m in re.finditer(pattern, content, re.I):
-            found.append({"motif": m.group(), "suggestion": suggestion, "explication": note})
-    return found
-
 if st.button("Analyser le mémoire", type="primary"):
-    results = offline_suggestions(text)
+    results = offline_suggestions(text, language=language)
     if mode == "En ligne (LanguageTool)" and language != "Malagasy":
         code = "fr" if language == "Français" else "en-US"
         try:
-            resp = requests.post("https://api.languagetool.org/v2/check",
-                                 data={"text": text[:20000], "language": code}, timeout=25)
-            resp.raise_for_status()
-            for item in resp.json().get("matches", []):
-                start, length = item.get("offset", 0), item.get("length", 0)
-                replacements = [x.get("value", "") for x in item.get("replacements", [])[:3]]
-                results.append({"motif": text[start:start+length],
-                    "suggestion": " / ".join(replacements) or "À vérifier",
-                    "explication": item.get("message", "LanguageTool")})
+            with st.spinner("Vérification grammaticale en ligne..."):
+                results.extend(languagetool_suggestions(text, code))
         except Exception as e:
             st.warning(f"LanguageTool indisponible : {e}")
     elif language == "Malagasy" and mode != "Hors ligne":
-        st.warning("LanguageTool n'est pas activé pour le malagasy dans cette version.")
+        st.warning("LanguageTool n'est pas activé pour le malagasy. Les règles locales restent disponibles.")
+    # Identifiant stable pour conserver les choix de l'utilisateur lors du rerun Streamlit.
+    for i, item in enumerate(results):
+        item["id"] = i
     st.session_state["cg_results"] = results
+    st.session_state["cg_corrected_text"] = text
+    st.session_state["cg_original_text"] = text
     log_app_event("document_analyzed")
 
 if "cg_results" in st.session_state:
-    st.subheader("Suggestions")
-    st.write(f"{len(st.session_state['cg_results'])} suggestion(s)")
-    if st.session_state["cg_results"]:
-        st.dataframe(st.session_state["cg_results"], use_container_width=True, hide_index=True)
+    st.subheader("Suggestions de correction")
+    results = st.session_state["cg_results"]
+    st.write(f"{len(results)} suggestion(s) détectée(s). Le texte original est conservé.")
+    if results:
+        accepted = []
+        for item in results:
+            label = f"{item['category']} · « {item['motif']} » → « {item['suggestion']} »"
+            checked = st.checkbox(label, key=f"cg_accept_{item['id']}")
+            st.caption(item.get("explication", "Suggestion à vérifier."))
+            if checked:
+                accepted.append(item["id"])
+        col_apply, col_all, col_reset = st.columns(3)
+        with col_apply:
+            if st.button("Appliquer les corrections sélectionnées", type="primary"):
+                chosen = [x for x in results if x["id"] in accepted]
+                st.session_state["cg_corrected_text"] = apply_suggestions(
+                    st.session_state["cg_corrected_text"], chosen
+                )
+                st.success(f"{len(chosen)} correction(s) appliquée(s).")
+        with col_all:
+            if st.button("Tout corriger automatiquement"):
+                st.session_state["cg_corrected_text"] = apply_suggestions(
+                    st.session_state["cg_corrected_text"], results
+                )
+                st.success("Toutes les suggestions applicables ont été intégrées.")
+        with col_reset:
+            if st.button("Réinitialiser au texte original"):
+                st.session_state["cg_corrected_text"] = st.session_state["cg_original_text"]
+                st.success("Texte original restauré.")
     else:
         st.info("Aucune suggestion automatique trouvée. Cela ne garantit pas l'absence d'erreurs.")
+    st.text_area("Texte après correction", st.session_state.get("cg_corrected_text", text), height=300)
 
 st.subheader("Reformulation académique (facultative)")
 rewrite_text = st.text_area("Texte à reformuler")
