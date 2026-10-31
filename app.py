@@ -354,8 +354,16 @@ def add_word_toc(document):
     body = document._element.body
     body.remove(title._p)
     body.remove(p._p)
-    body.insert(0, p._p)
-    body.insert(0, title._p)
+    # Place la table des matières à la toute fin du document,
+    # juste avant les propriétés de section Word (sectPr).
+    section_properties = body.sectPr
+    if section_properties is not None:
+        insert_at = list(body).index(section_properties)
+        body.insert(insert_at, title._p)
+        body.insert(insert_at + 1, p._p)
+    else:
+        body.append(title._p)
+        body.append(p._p)
     return document
 
 def refresh_docx_toc_with_libreoffice(docx_bytes):
