@@ -359,30 +359,87 @@ def add_word_toc(document):
     return document
 
 def refresh_docx_toc_with_libreoffice(docx_bytes):
-    """Actualise la table des matières et ses numéros de page avant le téléchargement."""
+    """Ouvre le DOCX avec LibreOffice UNO, actualise les index, puis l'enregistre."""
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
-    if not soffice:
-        raise RuntimeError("LibreOffice Writer n'est pas installé sur le serveur.")
+    system_python = shutil.which("python3")
+    if not soffice or not system_python:
+        raise RuntimeError("LibreOffice et Python système sont nécessaires pour finaliser la table des matières.")
+
     with tempfile.TemporaryDirectory() as workdir:
-        source_dir = Path(workdir) / "source"
-        output_dir = Path(workdir) / "output"
-        profile_dir = Path(workdir) / "profile"
-        source_dir.mkdir()
-        output_dir.mkdir()
-        source_file = source_dir / "correctgloss_memoire.docx"
+        root = Path(workdir)
+        source_file = root / "correctgloss_memoire.docx"
+        output_file = root / "correctgloss_memoire_final.docx"
         source_file.write_bytes(docx_bytes)
-        command = [
+        port = 2002
+        profile_dir = root / "lo-profile"
+
+        uno_script = root / "refresh_toc.py"
+        uno_script.write_text(r'''
+import sys, time
+import uno
+from com.sun.star.beans import PropertyValue
+from com.sun.star.connection import NoConnectException
+
+def prop(name, value):
+    p = PropertyValue()
+    p.Name = name
+    p.Value = value
+    return p
+
+local_ctx = uno.getComponentContext()
+resolver = local_ctx.ServiceManager.createInstanceWithContext(
+    "com.sun.star.bridge.UnoUrlResolver", local_ctx)
+ctx = None
+for attempt in range(40):
+    try:
+        ctx = resolver.resolve(
+            "uno:socket,host=localhost,port=2002;urp;StarOffice.ComponentContext")
+        break
+    except NoConnectException:
+        time.sleep(0.5)
+if ctx is None:
+    raise RuntimeError("Connexion à LibreOffice impossible")
+
+smgr = ctx.ServiceManager
+desktop = smgr.createInstanceWithContext("com.sun.star.frame.Desktop", ctx)
+source = uno.systemPathToFileUrl(sys.argv[1])
+target = uno.systemPathToFileUrl(sys.argv[2])
+doc = desktop.loadComponentFromURL(source, "_blank", 0, (prop("Hidden", True),))
+if doc is None:
+    raise RuntimeError("Impossible d'ouvrir le document Word")
+try:
+    indexes = doc.getDocumentIndexes()
+    for i in range(indexes.getCount()):
+        indexes.getByIndex(i).update()
+    doc.calculateAll()
+    doc.storeAsURL(target, (prop("FilterName", "Office Open XML Text"),))
+finally:
+    doc.close(True)
+''', encoding="utf-8")
+
+        launch = subprocess.Popen([
             soffice, "--headless",
             f"-env:UserInstallation={profile_dir.as_uri()}",
-            "--convert-to", 'docx:Office Open XML Text',
-            "--outdir", str(output_dir), str(source_file)
-        ]
-        result = subprocess.run(command, capture_output=True, text=True, timeout=120)
-        refreshed_file = output_dir / source_file.name
-        if result.returncode != 0 or not refreshed_file.exists():
-            detail = (result.stderr or result.stdout or "Erreur de conversion inconnue")[-1200:]
-            raise RuntimeError(detail)
-        return refreshed_file.read_bytes()
+            f"--accept=socket,host=localhost,port={port};urp;StarOffice.ServiceManager",
+            "--norestore", "--nodefault", "--nofirststartwizard"
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            env = os.environ.copy()
+            env["PYTHONPATH"] = "/usr/lib/python3/dist-packages"
+            result = subprocess.run(
+                [system_python, str(uno_script), str(source_file), str(output_file)],
+                capture_output=True, text=True, timeout=150, env=env
+            )
+            if result.returncode != 0 or not output_file.exists():
+                detail = (result.stderr or result.stdout or "Erreur UNO inconnue")[-1500:]
+                raise RuntimeError(detail)
+            return output_file.read_bytes()
+        finally:
+            launch.terminate()
+            try:
+                launch.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                launch.kill()
 
 with st.sidebar:
     page = st.radio("Navigation", ["Correction", "Recherche & rédaction", "Dashboard administrateur"])
