@@ -256,23 +256,54 @@ SOURCES :
 
 
 def detect_and_style_headings(document):
-    """Reconnaît les titres afin qu'ils apparaissent dans la table des matières."""
+    """Classe les titres en niveaux logiques sans modifier le texte du mémoire."""
+    main_titles = {
+        "INTRODUCTION", "CONCLUSION", "BIBLIOGRAPHIE", "SITOGRAPHIE",
+        "ANNEXES", "REMERCIEMENTS", "RÉSUMÉ", "RESUME", "ABSTRACT",
+        "TABLE DES MATIÈRES", "TABLE DES MATIERES"
+    }
+    heading1 = document.styles["Heading 1"]
+    heading2 = document.styles["Heading 2"]
+    heading3 = document.styles["Heading 3"]
+
     for para in document.paragraphs:
-        value = para.text.strip()
+        value = re.sub(r"\s+", " ", para.text).strip()
         if not value:
             continue
         upper = value.upper()
-        if re.match(r"^(CHAPITRE|PARTIE)\s+([IVXLCDM]+|[0-9]+)", upper) or upper in {
-            "INTRODUCTION", "CONCLUSION", "BIBLIOGRAPHIE", "SITOGRAPHIE", "ANNEXES",
-            "REMERCIEMENTS", "RÉSUMÉ", "ABSTRACT"
-        }:
-            para.style = document.styles["Heading 1"]
-        elif re.match(r"^\d+\.\d+\.\d+\s+", value):
-            para.style = document.styles["Heading 3"]
-        elif re.match(r"^\d+\.\d+\s+", value):
-            para.style = document.styles["Heading 2"]
-        elif re.match(r"^\d+\.\s+", value):
-            para.style = document.styles["Heading 1"]
+        level = None
+
+        if upper in main_titles or re.match(
+            r"^(CHAPITRE|PARTIE)\s+([IVXLCDM]+|[0-9]+)\b", upper
+        ):
+            level = 1
+        elif re.match(r"^\d+(?:\.\d+){2,}(?:\s|$)", value):
+            level = 3
+        elif re.match(r"^\d+\.\d+(?:\s|$)", value):
+            level = 2
+        elif re.match(r"^\d+\.(?:\s|$)", value):
+            level = 1
+        elif re.match(r"^(SECTION|SOUS[- ]PARTIE)\s+([IVXLCDM]+|[0-9]+)\b", upper):
+            level = 2
+        elif len(value) <= 100 and value == upper and len(value.split()) <= 12:
+            # Titre court en majuscules : niveau principal, sauf s'il est déjà hiérarchisé.
+            level = 1
+
+        if level == 1:
+            para.style = heading1
+        elif level == 2:
+            para.style = heading2
+        elif level == 3:
+            para.style = heading3
+
+        if level:
+            para.paragraph_format.keep_with_next = True
+            para.paragraph_format.keep_together = True
+            for run in para.runs:
+                run.font.name = "Times New Roman"
+                run.bold = True
+                run.font.size = Pt(14 if level == 1 else 12)
+
     return document
 
 
