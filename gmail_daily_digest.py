@@ -50,7 +50,7 @@ def main():
         except ValueError:
             detail = response.text[:1500]
         raise RuntimeError(
-            f"Supabase API error ({response.status}): {detail}"
+            f"Supabase API error ({response.status_code}): {detail}"
         )
 
     events = response.json()
