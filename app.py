@@ -300,7 +300,7 @@ def add_word_toc(document):
     begin.set(qn("w:dirty"), "true")
     instr = OxmlElement("w:instrText")
     instr.set(qn("xml:space"), "preserve")
-    instr.text = ' TOC \o "1-3" \h \z \u '
+    instr.text = r' TOC \o "1-3" \h \z \u '
     separate = OxmlElement("w:fldChar")
     separate.set(qn("w:fldCharType"), "separate")
     placeholder = OxmlElement("w:r")
