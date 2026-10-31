@@ -325,6 +325,32 @@ def add_word_toc(document):
     body.insert(0, title._p)
     return document
 
+def refresh_docx_toc_with_libreoffice(docx_bytes):
+    """Actualise la table des matières et ses numéros de page avant le téléchargement."""
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        raise RuntimeError("LibreOffice Writer n'est pas installé sur le serveur.")
+    with tempfile.TemporaryDirectory() as workdir:
+        source_dir = Path(workdir) / "source"
+        output_dir = Path(workdir) / "output"
+        profile_dir = Path(workdir) / "profile"
+        source_dir.mkdir()
+        output_dir.mkdir()
+        source_file = source_dir / "correctgloss_memoire.docx"
+        source_file.write_bytes(docx_bytes)
+        command = [
+            soffice, "--headless",
+            f"-env:UserInstallation={profile_dir.as_uri()}",
+            "--convert-to", 'docx:Office Open XML Text',
+            "--outdir", str(output_dir), str(source_file)
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=120)
+        refreshed_file = output_dir / source_file.name
+        if result.returncode != 0 or not refreshed_file.exists():
+            detail = (result.stderr or result.stdout or "Erreur de conversion inconnue")[-1200:]
+            raise RuntimeError(detail)
+        return refreshed_file.read_bytes()
+
 with st.sidebar:
     page = st.radio("Navigation", ["Correction", "Recherche & rédaction", "Dashboard administrateur"])
     st.header("Paramètres")
@@ -449,9 +475,14 @@ if st.button("Préparer le DOCX avec table des matières", type="primary"):
     formatted = add_word_toc(formatted)
     output = io.BytesIO()
     formatted.save(output)
-    st.session_state["cg_docx"] = output.getvalue()
-    log_app_event("docx_export_prepared")
-    st.success("DOCX préparé. Dans Word, clic droit sur la table des matières > Mettre à jour les champs > Toute la table.")
+    try:
+        ready_docx = refresh_docx_toc_with_libreoffice(output.getvalue())
+        st.session_state["cg_docx"] = ready_docx
+        log_app_event("docx_export_prepared")
+        st.success("DOCX prêt : table des matières et numéros de page actualisés automatiquement.")
+    except Exception as exc:
+        st.error(f"La table des matières n'a pas pu être actualisée automatiquement : {exc}")
+        st.info("Le fichier n'est pas proposé au téléchargement afin d'éviter une table incomplète.")
 
 if "cg_docx" in st.session_state:
     st.download_button("Télécharger le DOCX", st.session_state["cg_docx"],
