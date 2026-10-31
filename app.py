@@ -419,7 +419,6 @@ try:
     indexes = doc.getDocumentIndexes()
     for i in range(indexes.getCount()):
         indexes.getByIndex(i).update()
-    doc.calculateAll()
     doc.storeAsURL(target, (prop("FilterName", "Office Open XML Text"),))
 finally:
     doc.close(True)
