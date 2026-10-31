@@ -148,17 +148,51 @@ def show_research_page():
                         f"[{i}] {item['title']}\nURL: {item['url']}\nExtrait: {item['snippet']}"
                         for i, item in enumerate(sources, start=1)
                     )
+                    type_rules = {
+                        "Plan détaillé": """PRODUIS UNIQUEMENT UN PLAN DÉTAILLÉ.
+Présente une structure hiérarchisée avec PARTIES, CHAPITRES et sections numérotées.
+Ajoute des intitulés précis et, si utile, une courte indication sous chaque grande partie.
+N'écris PAS d'introduction rédigée, de développement, de conclusion, de résumé ni de bibliographie.""",
+                        "Introduction": """PRODUIS UNIQUEMENT UNE INTRODUCTION ACADÉMIQUE RÉDIGÉE.
+Structure-la avec le contexte et la justification du sujet, l'intérêt du sujet, la problématique,
+les questions de recherche, les objectifs, les hypothèses si les informations le permettent,
+la méthodologie annoncée et la présentation du plan en quelques phrases.
+Ne rédige PAS le plan détaillé, les chapitres, le développement ni la conclusion.""",
+                        "Synthèse documentaire": """PRODUIS UNIQUEMENT UNE SYNTHÈSE DOCUMENTAIRE.
+Organise les idées et les connaissances issues des extraits, compare les points de vue
+lorsque les sources le permettent et signale les limites. N'ajoute pas d'introduction générale,
+de plan détaillé, de développement de mémoire ni de conclusion générale.""",
+                        "Développement": """PRODUIS UNIQUEMENT LE DÉVELOPPEMENT du sujet, avec des titres et sous-titres pertinents.
+Développe les idées soutenues par les extraits. N'écris ni l'introduction générale,
+ni le plan complet, ni la conclusion générale.""",
+                        "Conclusion": """PRODUIS UNIQUEMENT UNE CONCLUSION ACADÉMIQUE.
+Fais une synthèse des éléments établis, réponds prudemment à la problématique si les extraits
+le permettent, rappelle les limites et propose des perspectives. N'ajoute ni introduction,
+ni plan détaillé, ni nouveau développement.""",
+                        "Résumé": """PRODUIS UNIQUEMENT UN RÉSUMÉ fidèle et concis du sujet et des informations disponibles.
+N'ajoute ni plan détaillé, ni introduction complète, ni développement chapitre par chapitre,
+ni conclusion séparée."""
+                    }
                     prompt = f"""Tu es un assistant de recherche et de rédaction académique.
-Sujet : {st.session_state.get('cg_research_query', query)}
-Type demandé : {draft_type}
-Consignes : {extra_instructions or 'Rédaction claire et structurée en français.'}
+Respecte STRICTEMENT le type de document demandé. Le type sélectionné détermine le seul contenu
+à produire : ne le remplace pas par un autre type et ne mélange jamais plusieurs livrables.
+
+SUJET : {st.session_state.get('cg_research_query', query)}
+TYPE EXACT À PRODUIRE : {draft_type}
+
+INSTRUCTIONS OBLIGATOIRES POUR CE TYPE :
+{type_rules.get(draft_type, "Produis uniquement le type demandé.")}
+
+Consignes complémentaires : {extra_instructions or 'Rédaction claire et structurée en français.'}
 
 Utilise uniquement les informations présentes dans les extraits ci-dessous.
 N'invente aucun fait, chiffre, auteur, date ou référence. Si les extraits ne suffisent pas,
-signale les informations manquantes. Place des appels de source [1], [2] dans le texte
-uniquement lorsque l'extrait correspondant les soutient. Termine par une section
-« Sources à vérifier » reprenant les URL fournies. Précise qu'il s'agit d'un brouillon
-et que les pages originales doivent être consultées.
+indique brièvement les informations manquantes sans inventer. Place des appels de source [1], [2]
+uniquement lorsque l'extrait correspondant soutient réellement l'information.
+N'ajoute pas de section « Sources à vérifier » au milieu du livrable : termine par une courte
+section « Sources à vérifier » après le contenu demandé, reprenant les URL fournies.
+La section des sources ne doit pas transformer le livrable en un autre type de document.
+Précise en une phrase finale qu'il s'agit d'un brouillon à vérifier avec les pages originales.
 
 SOURCES :
 {source_context}
