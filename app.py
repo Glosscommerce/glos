@@ -128,6 +128,7 @@ def add_word_toc(document):
     return document
 
 with st.sidebar:
+    page = st.radio("Navigation", ["Correction", "Dashboard administrateur"])
     st.header("Paramètres")
     mode = st.radio("Mode de correction", ["Hors ligne", "En ligne (LanguageTool)"])
     language = st.selectbox("Langue", ["Français", "Anglais", "Malagasy"])
