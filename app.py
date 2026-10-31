@@ -318,7 +318,7 @@ def add_word_toc(document):
     run._r.append(instr)
     run._r.append(separate)
     p._p.append(placeholder)
-    p._p.append(end_run._r)
+    p._p.append(end_run)
 
     body = document._element.body
     body.remove(title._p)
