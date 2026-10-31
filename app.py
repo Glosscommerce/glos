@@ -289,9 +289,11 @@ def add_word_toc(document):
     update_fields.set(qn("w:val"), "true")
 
     title = document.add_paragraph()
-    title.style = document.styles["Title"]
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title.add_run("TABLE DES MATIÈRES")
+    title_run = title.add_run("TABLE DES MATIÈRES")
+    title_run.bold = True
+    title_run.font.name = "Times New Roman"
+    title_run.font.size = Pt(16)
 
     p = document.add_paragraph()
     run = p.add_run()
