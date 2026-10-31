@@ -28,6 +28,80 @@ if "cg_session_logged" not in st.session_state:
     log_app_event("app_open")
     st.session_state["cg_session_logged"] = True
 
+
+def secret_value(name, default=""):
+    try:
+        return st.secrets.get(name, os.getenv(name, default))
+    except Exception:
+        return os.getenv(name, default)
+
+def show_admin_dashboard():
+    st.header("📊 Dashboard administrateur")
+    password = secret_value("DASHBOARD_PASSWORD")
+    if not password:
+        st.error("Configurez DASHBOARD_PASSWORD dans les secrets Streamlit.")
+        return
+    entered = st.text_input("Mot de passe administrateur", type="password")
+    if not entered:
+        st.info("Entrez le mot de passe pour afficher les statistiques.")
+        return
+    if entered != password:
+        st.error("Mot de passe incorrect.")
+        return
+    url = secret_value("SUPABASE_URL").rstrip("/")
+    service_key = secret_value("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not service_key:
+        st.warning("Ajoutez SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY dans les secrets Streamlit.")
+        return
+    try:
+        response = requests.get(
+            f"{url}/rest/v1/app_events",
+            headers={"apikey": service_key, "Authorization": f"Bearer {service_key}"},
+            params={"select": "event_name,app_version,created_at", "order": "created_at.desc", "limit": "5000"},
+            timeout=20)
+        response.raise_for_status()
+        events = response.json()
+        counts = {}
+        for event in events:
+            name = event.get("event_name", "")
+            counts[name] = counts.get(name, 0) + 1
+        cols = st.columns(4)
+        for col, label, key in zip(cols,
+            ["Ouvertures", "Analyses", "Reformulations IA", "Exports DOCX"],
+            ["app_open", "document_analyzed", "ai_rewrite", "docx_export_prepared"]):
+            col.metric(label, counts.get(key, 0))
+        if events:
+            import pandas as pd
+            df = pd.DataFrame(events)
+            df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
+            daily = df.dropna(subset=["created_at"]).assign(jour=lambda x: x["created_at"].dt.strftime("%Y-%m-%d"))
+            daily = daily.groupby(["jour", "event_name"]).size().unstack(fill_value=0)
+            st.subheader("Activité quotidienne")
+            st.line_chart(daily)
+            st.subheader("Événements récents")
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.info("Aucun événement enregistré pour le moment.")
+    except Exception as e:
+        st.error(f"Impossible de charger les statistiques : {e}")
+
+def detect_and_style_headings(document):
+    for para in document.paragraphs:
+        value = para.text.strip()
+        if not value:
+            continue
+        upper = value.upper()
+        if re.match(r"^(CHAPITRE|PARTIE)\\s+([IVXLCDM]+|[0-9]+)", upper) or upper in {
+            "INTRODUCTION", "CONCLUSION", "BIBLIOGRAPHIE", "SITOGRAPHIE", "ANNEXES"}:
+            para.style = document.styles["Heading 1"]
+        elif re.match(r"^\\d+\\.\\d+\\.\\d+\\s+", value):
+            para.style = document.styles["Heading 3"]
+        elif re.match(r"^\\d+\\.\\d+\\s+", value):
+            para.style = document.styles["Heading 2"]
+        elif re.match(r"^\\d+\\.\\s+", value):
+            para.style = document.styles["Heading 1"]
+    return document
+
 def add_word_toc(document):
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
@@ -62,6 +136,10 @@ with st.sidebar:
     line_spacing = st.selectbox("Interligne", ["1.0", "1.15", "1.5", "2.0"], index=2)
     margin_cm = st.number_input("Marges (cm)", 1.5, 4.0, 2.5, 0.25)
     justify = st.checkbox("Justifier le texte", True)
+
+if page == "Dashboard administrateur":
+    show_admin_dashboard()
+    st.stop()
 
 uploaded = st.file_uploader("Importer un mémoire Word (.docx)", type=["docx"])
 if not uploaded:
@@ -154,6 +232,7 @@ if st.button("Préparer le DOCX avec table des matières", type="primary"):
         for run in para.runs:
             run.font.name = font
             run.font.size = Pt(int(font_size))
+    formatted = detect_and_style_headings(formatted)
     formatted = add_word_toc(formatted)
     output = io.BytesIO()
     formatted.save(output)
