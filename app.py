@@ -256,45 +256,73 @@ SOURCES :
 
 
 def detect_and_style_headings(document):
+    """Reconnaît les titres afin qu'ils apparaissent dans la table des matières."""
     for para in document.paragraphs:
         value = para.text.strip()
         if not value:
             continue
         upper = value.upper()
-        if re.match(r"^(CHAPITRE|PARTIE)\\s+([IVXLCDM]+|[0-9]+)", upper) or upper in {
-            "INTRODUCTION", "CONCLUSION", "BIBLIOGRAPHIE", "SITOGRAPHIE", "ANNEXES"}:
+        if re.match(r"^(CHAPITRE|PARTIE)\s+([IVXLCDM]+|[0-9]+)", upper) or upper in {
+            "INTRODUCTION", "CONCLUSION", "BIBLIOGRAPHIE", "SITOGRAPHIE", "ANNEXES",
+            "REMERCIEMENTS", "RÉSUMÉ", "ABSTRACT"
+        }:
             para.style = document.styles["Heading 1"]
-        elif re.match(r"^\\d+\\.\\d+\\.\\d+\\s+", value):
+        elif re.match(r"^\d+\.\d+\.\d+\s+", value):
             para.style = document.styles["Heading 3"]
-        elif re.match(r"^\\d+\\.\\d+\\s+", value):
+        elif re.match(r"^\d+\.\d+\s+", value):
             para.style = document.styles["Heading 2"]
-        elif re.match(r"^\\d+\\.\\s+", value):
+        elif re.match(r"^\d+\.\s+", value):
             para.style = document.styles["Heading 1"]
     return document
 
+
 def add_word_toc(document):
+    """Ajoute un champ TOC Word et demande sa mise à jour automatique à l'ouverture."""
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
+
+    settings = document.settings.element
+    update_fields = settings.find(qn("w:updateFields"))
+    if update_fields is None:
+        update_fields = OxmlElement("w:updateFields")
+        settings.append(update_fields)
+    update_fields.set(qn("w:val"), "true")
+
+    title = document.add_paragraph()
+    title.style = document.styles["Title"]
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title.add_run("TABLE DES MATIÈRES")
+
     p = document.add_paragraph()
     run = p.add_run()
     begin = OxmlElement("w:fldChar")
     begin.set(qn("w:fldCharType"), "begin")
+    begin.set(qn("w:dirty"), "true")
     instr = OxmlElement("w:instrText")
     instr.set(qn("xml:space"), "preserve")
-    instr.text = ' TOC \\\\o "1-3" \\\\h \\\\z \\\\u '
+    instr.text = ' TOC \o "1-3" \h \z \u '
     separate = OxmlElement("w:fldChar")
     separate.set(qn("w:fldCharType"), "separate")
-    text_run = OxmlElement("w:r")
-    text_node = OxmlElement("w:t")
-    text_node.text = "Ouvrez dans Word puis mettez à jour la table."
-    text_run.append(text_node)
+    placeholder = OxmlElement("w:r")
+    placeholder_text = OxmlElement("w:t")
+    placeholder_text.text = "La table des matières sera générée automatiquement à l'ouverture dans Word."
+    placeholder.append(placeholder_text)
+    end_run = OxmlElement("w:r")
     end = OxmlElement("w:fldChar")
     end.set(qn("w:fldCharType"), "end")
-    run._r.append(begin); run._r.append(instr); run._r.append(separate)
-    p._p.append(text_run); run._r.append(end)
+    end_run.append(end)
+
+    run._r.append(begin)
+    run._r.append(instr)
+    run._r.append(separate)
+    p._p.append(placeholder)
+    p._p.append(end_run._r)
+
     body = document._element.body
+    body.remove(title._p)
     body.remove(p._p)
     body.insert(0, p._p)
+    body.insert(0, title._p)
     return document
 
 with st.sidebar:
