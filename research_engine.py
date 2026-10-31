@@ -152,6 +152,23 @@ def search_bibliography(topic: str, max_results: int = 8):
     except requests.RequestException:
         pass
 
+    # Recherche complémentaire de mémoires, thèses, rapports et documents PDF.
+    documents = []
+    try:
+        doc_query = f'{topic} (mémoire OR thesis OR dissertation OR report OR rapport OR filetype:pdf)'
+        for item in DDGS().text(doc_query, region="wt-wt", safesearch="moderate", max_results=limit):
+            url = (item.get("href") or "").strip()
+            title = (item.get("title") or "").strip()
+            if url.startswith(("https://", "http://")) and title:
+                documents.append({
+                    "title": title[:300], "url": url,
+                    "snippet": (item.get("body") or "")[:700],
+                    "provider": "Recherche web",
+                })
+    except Exception:
+        pass
+    output["Documents, mémoires et thèses"] = documents[:limit]
+
     for category in ("Articles scientifiques", "Livres"):
         output[category] = output[category][:limit]
     output["Auteurs et chercheurs"] = output["Auteurs et chercheurs"][:limit * 2]
