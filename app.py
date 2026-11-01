@@ -448,6 +448,28 @@ finally:
             except subprocess.TimeoutExpired:
                 launch.kill()
 
+
+def convert_docx_to_pdf(docx_bytes):
+    """Convertit un DOCX finalisé en PDF pour une ouverture facile sur PC et Android."""
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        raise RuntimeError("LibreOffice est nécessaire pour créer le PDF.")
+    with tempfile.TemporaryDirectory() as workdir:
+        root = Path(workdir)
+        source_file = root / "correctgloss_memoire.docx"
+        output_file = root / "correctgloss_memoire.pdf"
+        profile_dir = root / "lo-pdf-profile"
+        source_file.write_bytes(docx_bytes)
+        result = subprocess.run([
+            soffice, "--headless",
+            f"-env:UserInstallation={profile_dir.as_uri()}",
+            "--convert-to", "pdf", "--outdir", str(root), str(source_file),
+        ], capture_output=True, text=True, timeout=150)
+        if result.returncode != 0 or not output_file.exists():
+            detail = (result.stderr or result.stdout or "Erreur de conversion PDF inconnue")[-1200:]
+            raise RuntimeError(detail)
+        return output_file.read_bytes()
+
 with st.sidebar:
     page = st.radio("Navigation", ["Correction", "Recherche & rédaction", "Dashboard administrateur"])
     st.header("Paramètres")
@@ -575,15 +597,35 @@ if st.button("Préparer le DOCX avec table des matières", type="primary"):
     try:
         ready_docx = refresh_docx_toc_with_libreoffice(output.getvalue())
         st.session_state["cg_docx"] = ready_docx
+        st.session_state.pop("cg_pdf", None)
+        st.session_state.pop("cg_pdf_error", None)
+        try:
+            st.session_state["cg_pdf"] = convert_docx_to_pdf(ready_docx)
+            log_app_event("pdf_export_prepared")
+        except Exception as pdf_exc:
+            st.session_state["cg_pdf_error"] = str(pdf_exc)
         log_app_event("docx_export_prepared")
-        st.success("DOCX prêt : table des matières et numéros de page actualisés automatiquement.")
+        st.success("DOCX prêt. Vous pouvez aussi télécharger une version PDF compatible PC et Android.")
     except Exception as exc:
         st.error(f"La table des matières n'a pas pu être actualisée automatiquement : {exc}")
         st.info("Le fichier n'est pas proposé au téléchargement afin d'éviter une table incomplète.")
 
 if "cg_docx" in st.session_state:
-    st.download_button("Télécharger le DOCX", st.session_state["cg_docx"],
-        file_name="correctgloss_memoire.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    col_docx, col_pdf = st.columns(2)
+    with col_docx:
+        st.download_button("Télécharger le Word (.docx)", st.session_state["cg_docx"],
+            file_name="correctgloss_memoire.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True)
+    with col_pdf:
+        if st.session_state.get("cg_pdf"):
+            st.download_button("Télécharger le PDF (.pdf)", st.session_state["cg_pdf"],
+                file_name="correctgloss_memoire.pdf", mime="application/pdf",
+                use_container_width=True)
+        else:
+            st.button("PDF indisponible", disabled=True, use_container_width=True)
+    if st.session_state.get("cg_pdf_error"):
+        st.warning("Le Word est prêt, mais la conversion PDF a échoué : " + st.session_state["cg_pdf_error"])
+    st.caption("PDF : recommandé pour une ouverture facile sur Android et PC. Word : recommandé pour modifier le document.")
 
 st.caption("Les suggestions sont indicatives. Conservez toujours une copie originale du mémoire.")
