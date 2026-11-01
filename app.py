@@ -13,6 +13,41 @@ st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
 st.title("📘 CORRECTGLOSS")
 st.caption("Correction • reformulation académique • mise en page • contrôle des citations")
 
+st.markdown("""
+<style>
+/* Mise en page adaptative : conserve toutes les fonctions sur PC et smartphone. */
+@media (max-width: 768px) {
+  .main .block-container {
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+    padding-top: 1rem;
+    padding-bottom: 2rem;
+    max-width: 100%;
+  }
+  h1 { font-size: 1.65rem !important; }
+  h2 { font-size: 1.35rem !important; }
+  h3 { font-size: 1.15rem !important; }
+  [data-testid="stButton"] button,
+  [data-testid="stDownloadButton"] button {
+    width: 100%;
+    min-height: 2.8rem;
+    white-space: normal;
+  }
+  [data-testid="stFileUploader"] section {
+    padding: 0.75rem;
+  }
+  [data-testid="stDataFrame"],
+  [data-testid="stTable"] {
+    overflow-x: auto;
+  }
+  [data-testid="stTextArea"] textarea,
+  [data-testid="stTextInput"] input {
+    font-size: 16px !important;
+  }
+}
+</style>
+""", unsafe_allow_html=True)
+
 def log_app_event(event_type):
     url = os.getenv("SUPABASE_URL", "").rstrip("/")
     anon = os.getenv("SUPABASE_ANON_KEY", "")
