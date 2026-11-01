@@ -10,6 +10,23 @@ from correction_engine import offline_suggestions, languagetool_suggestions, app
 
 APP_NAME = "Mémoire Correcteur Pro"
 st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
+
+# Google Analytics : suivi des visites CORRECTGLOSS.
+# Le code est injecté dans la page Streamlit (pas dans un iframe).
+GA_MEASUREMENT_ID = "G-MPMT3MR3M6"
+st.html(
+    f"""
+    <script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){{dataLayer.push(arguments);}}
+      gtag('js', new Date());
+      gtag('config', '{GA_MEASUREMENT_ID}');
+    </script>
+    """,
+    unsafe_allow_javascript=True,
+)
+
 st.title("📘 CORRECTGLOSS")
 st.caption("Correction • reformulation académique • mise en page • contrôle des citations")
 
