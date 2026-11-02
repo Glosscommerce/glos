@@ -540,6 +540,76 @@ def make_research_docx(title: str, body: str, sources: list):
             doc.add_paragraph(citation)
     return doc
 
+def correct_docx_with_languagetool(document, language_code: str):
+    """Apply LanguageTool's first replacement to matching DOCX paragraphs."""
+    paragraphs = list(document.paragraphs)
+
+    def collect_table_paragraphs(table):
+        for row in table.rows:
+            for cell in row.cells:
+                paragraphs.extend(cell.paragraphs)
+                for nested_table in cell.tables:
+                    collect_table_paragraphs(nested_table)
+
+    for table in document.tables:
+        collect_table_paragraphs(table)
+
+    paragraphs = [paragraph for paragraph in paragraphs if paragraph.text]
+    original_parts = [paragraph.text for paragraph in paragraphs]
+    full_text = "\n".join(original_parts)
+    if not full_text.strip():
+        return document, []
+
+    response = requests.post(
+        "https://api.languagetool.org/v2/check",
+        data={"text": full_text[:20000], "language": language_code},
+        timeout=35,
+    )
+    response.raise_for_status()
+    matches = response.json().get("matches", [])
+
+    starts, cursor = [], 0
+    for part in original_parts:
+        starts.append(cursor)
+        cursor += len(part) + 1
+
+    edits_by_paragraph = {}
+    for match in matches:
+        offset = int(match.get("offset", 0))
+        length = int(match.get("length", 0))
+        replacements = match.get("replacements") or []
+        if not replacements or length <= 0:
+            continue
+        replacement = replacements[0].get("value", "")
+        if not replacement:
+            continue
+        for index, start in enumerate(starts):
+            end = start + len(original_parts[index])
+            if start <= offset and offset + length <= end:
+                local_start = offset - start
+                edits_by_paragraph.setdefault(index, []).append(
+                    (local_start, length, replacement,
+                     full_text[offset:offset + length], match.get("message", "Correction linguistique"))
+                )
+                break
+
+    changes = []
+    for index, edits in edits_by_paragraph.items():
+        corrected = original_parts[index]
+        for local_start, length, replacement, old_text, message in sorted(
+            edits, key=lambda item: item[0], reverse=True
+        ):
+            corrected = corrected[:local_start] + replacement + corrected[local_start + length:]
+            changes.append({
+                "Texte initial": old_text,
+                "Texte corrigé": replacement,
+                "Explication": message,
+            })
+        paragraphs[index].text = corrected
+
+    return document, changes
+
+
 def offline_rewrite(text: str) -> str:
     """Apply conservative, transparent local cleanups without an AI service."""
     cleaned = re.sub(r"[ \t]+", " ", text.strip())
@@ -786,14 +856,19 @@ if page == "Accueil":
 # PAGE: CORRECTION
 # -------------------------------------------------------------------
 elif page == "Correction":
-    st.header("Correction de document")
-    with st.expander("Paramètres de correction", expanded=True):
-        mode = st.radio(
-            "Mode de correction",
-            ["Hors ligne", "En ligne (LanguageTool)"],
-            horizontal=True,
-        )
-        language = st.selectbox("Langue", ["Français", "Anglais", "Malagasy"])
+    st.header("Correction automatique de document")
+    st.info(
+        "La correction automatique applique directement les premières corrections proposées par LanguageTool "
+        "dans une copie du document Word. Le fichier original n'est jamais remplacé. "
+        "Une relecture humaine reste nécessaire pour les formulations ambiguës."
+    )
+    mode = st.radio(
+        "Mode de correction",
+        ["Correction automatique (LanguageTool en ligne)", "Suggestions uniquement (hors ligne)"],
+        horizontal=True,
+        key="cg_correction_mode",
+    )
+    language = st.selectbox("Langue du document", ["Français", "Anglais"], key="cg_correction_language")
     uploaded = st.file_uploader(
         "Importer un mémoire Word (.docx)",
         type=["docx"],
@@ -804,70 +879,68 @@ elif page == "Correction":
         try:
             original_bytes = uploaded.getvalue()
             doc = Document(io.BytesIO(original_bytes))
-            paragraphs = [p.text for p in doc.paragraphs]
-            document_text = "\n\n".join(p for p in paragraphs if p.strip())
             st.success(
-                f"Document chargé : {len(paragraphs)} paragraphes • "
+                f"Document chargé : {len(doc.paragraphs)} paragraphes principaux • "
                 f"{len(doc.tables)} tableaux"
             )
             st.text_area(
-                "Aperçu du document",
-                "\n\n".join([p for p in paragraphs if p.strip()][:8]),
-                height=220,
+                "Aperçu du document original",
+                "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())[:5000],
+                height=200,
                 disabled=True,
             )
 
-            if st.button("Analyser le mémoire", type="primary"):
-                results = offline_suggestions(document_text)
-                if mode == "En ligne (LanguageTool)" and language != "Malagasy":
-                    code = "fr" if language == "Français" else "en-US"
+            if st.button("Corriger automatiquement le document", type="primary", key="cg_run_auto_correction"):
+                if mode == "Correction automatique (LanguageTool en ligne)":
+                    language_code = "fr" if language == "Français" else "en-US"
                     try:
-                        response = requests.post(
-                            "https://api.languagetool.org/v2/check",
-                            data={"text": document_text[:20000], "language": code},
-                            timeout=25,
-                        )
-                        response.raise_for_status()
-                        for item in response.json().get("matches", []):
-                            start = item.get("offset", 0)
-                            length = item.get("length", 0)
-                            replacements = [
-                                item2.get("value", "")
-                                for item2 in item.get("replacements", [])[:3]
-                            ]
-                            results.append({
-                                "motif": document_text[start:start + length],
-                                "suggestion": " / ".join(replacements) or "À vérifier",
-                                "explication": item.get("message", "LanguageTool"),
-                            })
+                        with st.spinner("Analyse et correction automatique en cours..."):
+                            corrected_doc, changes = correct_docx_with_languagetool(
+                                Document(io.BytesIO(original_bytes)), language_code
+                            )
+                        output = io.BytesIO()
+                        corrected_doc.save(output)
+                        st.session_state["cg_corrected_docx"] = output.getvalue()
+                        st.session_state["cg_correction_changes"] = changes
+                        st.session_state["cg_correction_filename"] = uploaded.name.rsplit(".", 1)[0] + "_corrige.docx"
+                        log_app_event("document_auto_corrected")
+                        if changes:
+                            st.success(f"Correction terminée : {len(changes)} modification(s) appliquée(s).")
+                        else:
+                            st.info("Aucune correction automatique proposée par LanguageTool.")
                     except Exception as exc:
-                        st.warning(f"LanguageTool indisponible : {exc}")
-                elif language == "Malagasy" and mode != "Hors ligne":
-                    st.warning(
-                        "LanguageTool n'est pas activé pour le malagasy "
-                        "dans cette version."
-                    )
-                st.session_state["cg_results"] = results
-                st.session_state["cg_original_bytes"] = original_bytes
-                log_app_event("document_analyzed")
-
-            if "cg_results" in st.session_state:
-                st.subheader("Suggestions de correction")
-                results = st.session_state["cg_results"]
-                st.write(f"{len(results)} suggestion(s)")
-                if results:
-                    st.dataframe(
-                        results, use_container_width=True, hide_index=True
-                    )
+                        st.error(f"La correction en ligne a échoué : {exc}")
+                        st.info("Vérifiez la connexion Internet puis réessayez. Le document original reste intact.")
                 else:
-                    st.info(
-                        "Aucune suggestion automatique trouvée. "
-                        "Cela ne garantit pas l'absence d'erreurs."
-                    )
+                    text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+                    suggestions = offline_suggestions(text)
+                    st.session_state["cg_results"] = suggestions
+                    st.info("Le mode hors ligne affiche des suggestions limitées ; il ne modifie pas le document.")
+
+            changes = st.session_state.get("cg_correction_changes", [])
+            if changes:
+                st.subheader("Modifications appliquées")
+                st.dataframe(changes, use_container_width=True, hide_index=True)
+            if st.session_state.get("cg_corrected_docx"):
+                st.download_button(
+                    "Télécharger le Word corrigé (.docx)",
+                    data=st.session_state["cg_corrected_docx"],
+                    file_name=st.session_state.get("cg_correction_filename", "document_corrige.docx"),
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key="cg_download_corrected_docx",
+                )
+                st.caption(
+                    "Le fichier téléchargé est une copie corrigée. Vérifiez les changements, "
+                    "car la première suggestion automatique n'est pas toujours adaptée au contexte."
+                )
+            suggestions = st.session_state.get("cg_results", [])
+            if suggestions:
+                st.subheader("Suggestions hors ligne")
+                st.dataframe(suggestions, use_container_width=True, hide_index=True)
         except Exception as exc:
             st.error(f"Impossible d'ouvrir le document : {exc}")
     else:
-        st.info("Importez un document Word pour lancer les contrôles.")
+        st.info("Importez un document Word pour lancer la correction automatique.")
 
     st.divider()
     st.subheader("Reformulation académique")
@@ -891,7 +964,6 @@ elif page == "Correction":
             st.error(f"Erreur IA : {exc}")
 
 
-# -------------------------------------------------------------------
 # PAGE: RESEARCH AND WRITING
 # -------------------------------------------------------------------
 elif page == "Recherche & rédaction":
