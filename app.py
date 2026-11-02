@@ -225,6 +225,104 @@ Context to use:
 Note: This free offline template is currently provided in French/English headings only. Adapt the wording into {language} and verify all facts, data and references before using it."""
 
 
+
+def search_academic_sources(query: str, limit: int = 6):
+    """Search Crossref and OpenAlex for real scholarly metadata; never invent references."""
+    found = []
+    seen = set()
+    try:
+        response = requests.get(
+            "https://api.crossref.org/works",
+            params={"query": query, "rows": limit, "select": "title,author,published,created,container-title,DOI,type,URL"},
+            headers={"User-Agent": "CORRECTGLOSS/0.6 (academic source discovery)"},
+            timeout=18,
+        )
+        response.raise_for_status()
+        items = response.json().get("message", {}).get("items", [])
+        for item in items:
+            title = (item.get("title") or [""])[0].strip()
+            if not title:
+                continue
+            doi = item.get("DOI", "")
+            url = item.get("URL") or (f"https://doi.org/{doi}" if doi else "")
+            authors = []
+            for author in item.get("author", [])[:5]:
+                name = " ".join(x for x in [author.get("given", ""), author.get("family", "")] if x)
+                if name:
+                    authors.append(name)
+            date_parts = (item.get("published", {}) or {}).get("date-parts", [[]])[0]
+            year = str(date_parts[0]) if date_parts else ""
+            key = doi.lower() or title.lower()
+            if key not in seen:
+                seen.add(key)
+                found.append({"title": title, "authors": ", ".join(authors) or "Auteur non indiqué",
+                              "year": year, "publisher": (item.get("container-title") or [""])[0],
+                              "doi": doi, "url": url, "source": "Crossref"})
+    except Exception:
+        pass
+    try:
+        response = requests.get(
+            "https://api.openalex.org/works",
+            params={"search": query, "per-page": limit, "select": "title,authorships,publication_year,doi,primary_location"},
+            timeout=18,
+        )
+        response.raise_for_status()
+        items = response.json().get("results", [])
+        for item in items:
+            title = (item.get("title") or "").strip()
+            if not title:
+                continue
+            doi = (item.get("doi") or "").replace("https://doi.org/", "")
+            url = item.get("doi") or ((item.get("primary_location") or {}).get("landing_page_url") or "")
+            authors = []
+            for authorship in item.get("authorships", [])[:5]:
+                author = (authorship.get("author") or {}).get("display_name")
+                if author:
+                    authors.append(author)
+            key = doi.lower() or title.lower()
+            if key not in seen:
+                seen.add(key)
+                found.append({"title": title, "authors": ", ".join(authors) or "Auteur non indiqué",
+                              "year": str(item.get("publication_year") or ""),
+                              "publisher": "", "doi": doi, "url": url, "source": "OpenAlex"})
+    except Exception:
+        pass
+    return found[:limit * 2]
+
+
+def make_research_docx(title: str, body: str, sources: list):
+    """Create a clean Word document from generated research text and verified metadata."""
+    doc = Document()
+    doc.add_heading(title or "Travail académique", 0)
+    for block in re.split(r"\\n\\s*\\n", body.strip()):
+        block = block.strip()
+        if not block:
+            continue
+        lines = block.splitlines()
+        heading = lines[0].strip()
+        if len(lines) == 1 and (heading.isupper() or heading.startswith(("PARTIE ", "CHAPITRE "))):
+            doc.add_heading(heading, level=1)
+        else:
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                if line.isupper() and len(line) < 100:
+                    doc.add_heading(line, level=2)
+                else:
+                    doc.add_paragraph(line)
+    if sources:
+        doc.add_page_break()
+        doc.add_heading("Bibliographie et sitographie — sources repérées", level=1)
+        for source in sources:
+            citation = f"{source.get('authors','Auteur non indiqué')} ({source.get('year','s.d.')}). {source.get('title','')}. {source.get('publisher','')}".strip()
+            if source.get("doi"):
+                citation += f" DOI : https://doi.org/{source['doi']}"
+            elif source.get("url"):
+                citation += f" URL : {source['url']}"
+            doc.add_paragraph(citation)
+    return doc
+
 def offline_rewrite(text: str) -> str:
     """Apply a few transparent local text cleanups; no AI service required."""
     cleaned = re.sub(r"[ \\t]+", " ", text.strip())
@@ -580,54 +678,196 @@ elif page == "Correction":
 # PAGE: RESEARCH AND WRITING
 # -------------------------------------------------------------------
 elif page == "Recherche & rédaction":
-    st.header("Recherche & rédaction")
+    st.header("Recherche & rédaction complète")
     st.info(
-        "Mode gratuit hors ligne : les propositions utilisent des modèles académiques intégrés. "
-        "Aucune clé API ni aucun crédit OpenAI ne sont nécessaires. Vérifiez toujours les faits, "
-        "chiffres et références."
+        "Préparez votre travail par étapes, recherchez des références réelles, "
+        "puis exportez le contenu en Word et PDF. Sans clé IA active, le mode gratuit "
+        "fournit une trame académique détaillée et des consignes de rédaction, pas un mémoire final rédigé automatiquement."
     )
-    task = st.selectbox(
-        "Type de travail",
-        [
-            "Proposer un plan détaillé",
-            "Rédiger une introduction",
-            "Formuler une problématique et des hypothèses",
-            "Améliorer un paragraphe académique",
-            "Préparer une conclusion",
-            "Créer des questions de recherche",
-        ],
-    )
-    subject = st.text_input("Sujet / thème du travail")
-    context = st.text_area(
-        "Contexte, consignes ou texte de départ",
-        height=180,
-        placeholder="Précisez le niveau, la filière, le terrain d'étude et les consignes...",
-    )
-    language_out = st.selectbox(
-        "Langue de rédaction",
-        ["Français", "Anglais", "Malagasy"],
-    )
-    if st.button("Générer une proposition", type="primary"):
-        if not subject.strip():
-            st.warning("Veuillez saisir le sujet de votre travail.")
-        else:
-            try:
-                with st.spinner("Préparation du contenu hors ligne..."):
-                    output = generate_free_research(task, subject, context, language_out)
-                st.session_state["cg_research_output"] = output
-                st.text_area("Résultat à relire et compléter", output, height=420)
-                st.success("Proposition créée en mode gratuit, sans clé API ni crédit OpenAI.")
-                log_app_event("research_writing_free")
-            except Exception as exc:
-                st.error(f"Erreur lors de la génération hors ligne : {exc}")
-
-    if st.session_state.get("cg_research_output"):
-        st.download_button(
-            "Télécharger le texte (.txt)",
-            data=st.session_state["cg_research_output"],
-            file_name="correctgloss_redaction.txt",
-            mime="text/plain",
+    left, right = st.columns(2)
+    with left:
+        subject = st.text_input("Sujet / thème du travail", key="cg_rw_subject")
+        work_type = st.selectbox(
+            "Type de document",
+            ["Mémoire universitaire", "Rapport de stage", "Exposé", "Article scientifique", "Projet de recherche"],
+            key="cg_rw_type",
         )
+        pages = st.slider("Nombre de pages souhaité", min_value=5, max_value=60, value=20, step=5, key="cg_rw_pages")
+        language_out = st.selectbox("Langue de rédaction", ["Français", "Malagasy", "Anglais"], key="cg_rw_language")
+    with right:
+        level = st.selectbox("Niveau", ["Licence", "Master 1", "Master 2", "Doctorat", "Autre"], key="cg_rw_level")
+        field = st.text_input("Filière / domaine", placeholder="Ex. Gestion commerciale, Commerce international")
+        study_area = st.text_input("Terrain / zone d'étude", placeholder="Ex. Exportateurs de girofle à Toamasina")
+        context = st.text_area(
+            "Consignes, période et informations de terrain",
+            height=145,
+            placeholder="Décrivez l'établissement, l'entreprise, la période, les données disponibles et les consignes...",
+            key="cg_rw_context",
+        )
+
+    st.caption(f"Estimation indicative : environ {pages * 250:,} mots pour {pages} pages, selon la mise en page et les exigences de votre établissement.".replace(",", " "))
+    st.subheader("1. Recherche de livres et articles scientifiques")
+    source_query = st.text_input(
+        "Mots-clés de recherche documentaire",
+        value=subject,
+        key="cg_rw_source_query",
+        placeholder="Saisissez votre sujet ou des mots-clés précis",
+    )
+    if st.button("Rechercher des sources réelles", key="cg_rw_search_sources"):
+        if not source_query.strip():
+            st.warning("Saisissez d'abord des mots-clés.")
+        else:
+            with st.spinner("Recherche dans Crossref et OpenAlex..."):
+                st.session_state["cg_rw_sources"] = search_academic_sources(source_query.strip(), 6)
+            if not st.session_state["cg_rw_sources"]:
+                st.warning("Aucune référence trouvée ou les services sont temporairement indisponibles. Réessayez avec d'autres mots-clés.")
+            else:
+                st.success(f"{len(st.session_state['cg_rw_sources'])} référence(s) trouvée(s). Vérifiez leur pertinence avant citation.")
+
+    sources = st.session_state.get("cg_rw_sources", [])
+    if sources:
+        for idx, source in enumerate(sources, 1):
+            st.markdown(f"**{idx}. {source['title']}**")
+            st.caption(f"{source['authors']} • {source['year'] or 'Année non indiquée'} • {source['source']}")
+            if source.get("url"):
+                st.markdown(f"[Consulter la source]({source['url']})")
+            elif source.get("doi"):
+                st.markdown(f"[Consulter le DOI](https://doi.org/{source['doi']})")
+
+    st.divider()
+    st.subheader("2. Rédaction par étapes")
+    task = st.selectbox(
+        "Que souhaitez-vous rédiger maintenant ?",
+        [
+            "Construire le plan détaillé complet",
+            "Rédiger l'introduction générale",
+            "Formuler la problématique, questions et hypothèses",
+            "Rédiger le cadre théorique et la revue de littérature",
+            "Rédiger le chapitre méthodologique",
+            "Rédiger un chapitre d'analyse des résultats",
+            "Rédiger la discussion et les recommandations",
+            "Rédiger la conclusion générale",
+            "Préparer la rédaction complète par étapes",
+            "Améliorer un texte académique fourni",
+        ],
+        key="cg_rw_task",
+    )
+    chapter = st.text_input(
+        "Titre ou sujet précis du chapitre (facultatif)",
+        placeholder="Ex. Chapitre 2 : Les déterminants de la compétitivité à l'exportation",
+        key="cg_rw_chapter",
+    )
+    supplied_text = st.text_area(
+        "Texte à améliorer (uniquement pour la tâche d'amélioration)",
+        height=120,
+        key="cg_rw_supplied_text",
+    )
+
+    if st.button("Générer le contenu", type="primary", key="cg_rw_generate"):
+        if not subject.strip():
+            st.warning("Veuillez saisir le sujet du travail.")
+        else:
+            pages_for_section = max(2, pages // 5) if task == "Préparer la rédaction complète par étapes" else max(2, pages // 3)
+            target_words = min(4500, pages_for_section * 250)
+            prompt = f"""
+Tu es un assistant de rédaction académique. Rédige en {language_out}, au niveau {level},
+pour un document de type {work_type}, dans le domaine {field or 'à préciser'}.
+Sujet : {subject}
+Terrain : {study_area or 'à préciser'}
+Consignes et données fournies : {context or 'Aucune donnée de terrain fournie'}
+Tâche : {task}
+Chapitre : {chapter or 'à définir selon le plan'}
+Texte à améliorer : {supplied_text or 'Aucun texte fourni'}
+Longueur cible pour cette section : environ {target_words} mots.
+Exigences : structure claire, style universitaire, transitions, concepts définis,
+aucun chiffre, résultat, auteur, citation ou référence inventé. N'affirme pas avoir
+consulté une source si elle n'est pas dans les références fournies. Utilise des
+marqueurs [SOURCE À AJOUTER] lorsque des preuves sont nécessaires. Distingue les
+hypothèses des résultats réellement observés. Si les données manquent, indique
+explicitement les éléments que l'étudiant doit collecter. Fournis un texte structuré
+avec des titres hiérarchisés. Ne prétends pas que le nombre de pages est garanti.
+"""
+            api_key = get_secret("OPENAI_API_KEY")
+            if api_key:
+                try:
+                    with st.spinner("Rédaction IA de la section en cours..."):
+                        generated = call_ai(prompt)
+                    st.session_state["cg_research_output"] = generated
+                    st.success("Section générée. Relisez et vérifiez les informations et les références.")
+                    log_app_event("research_writing_ai")
+                except Exception as exc:
+                    st.error(f"Rédaction IA indisponible : {exc}. Le mode gratuit reste disponible avec une trame.")
+            else:
+                if task == "Améliorer un texte académique fourni" and supplied_text.strip():
+                    generated = (
+                        "AIDE À L'AMÉLIORATION ACADÉMIQUE\n\n"
+                        + offline_rewrite(supplied_text)
+                        + "\n\nÀ vérifier : exactitude des faits, cohérence des arguments, citations et références."
+                    )
+                else:
+                    generated = generate_free_research(
+                        "Proposer un plan détaillé" if task == "Construire le plan détaillé complet" else task,
+                        subject,
+                        context + "\nType : " + work_type + "\nNiveau : " + level
+                        + "\nFilière : " + field + "\nTerrain : " + study_area
+                        + "\nNombre de pages visé : " + str(pages)
+                        + "\nSection demandée : " + (chapter or task),
+                        language_out,
+                    )
+                    generated = (
+                        f"TRAME DE RÉDACTION — {task.upper()}\n"
+                        f"Sujet : {subject}\nType : {work_type} • Niveau : {level} • Objectif : {pages} pages\n\n"
+                        + generated
+                        + "\n\nDÉVELOPPEMENT À COMPLÉTER\n"
+                        "Pour atteindre le volume demandé, développez chaque sous-partie avec : "
+                        "une définition appuyée par une source vérifiée, une explication, "
+                        "un exemple lié au terrain, une donnée collectée et une courte synthèse.\n\n"
+                        "ATTENTION : cette sortie hors ligne est une trame structurée, "
+                        "pas un mémoire complet rédigé ni une preuve documentaire. "
+                        "Ajoutez vos données réelles et vérifiez chaque référence."
+                    )
+                st.session_state["cg_research_output"] = generated
+                st.info("Mode gratuit hors ligne : trame détaillée générée. La rédaction longue automatique nécessite une IA disponible.")
+                log_app_event("research_writing_free")
+
+    output = st.session_state.get("cg_research_output", "")
+    if output:
+        st.subheader("3. Résultat")
+        edited_output = st.text_area("Relire et modifier le contenu", value=output, height=500, key="cg_rw_output_editor")
+        st.session_state["cg_research_output"] = edited_output
+        if st.button("Préparer les fichiers Word et PDF", key="cg_rw_prepare_exports"):
+            try:
+                document = make_research_docx(subject or "Travail académique", edited_output, sources)
+                word_buffer = io.BytesIO()
+                document.save(word_buffer)
+                pdf_buffer = document_to_pdf_bytes(document, "Times New Roman", 12, "1.5", 2.5, True)
+                st.session_state["cg_rw_docx"] = word_buffer.getvalue()
+                st.session_state["cg_rw_pdf"] = pdf_buffer
+                st.success("Les fichiers Word et PDF sont prêts.")
+            except Exception as exc:
+                st.error(f"Erreur de préparation des fichiers : {exc}")
+        if st.session_state.get("cg_rw_docx"):
+            st.download_button(
+                "Télécharger la rédaction Word (.docx)",
+                data=st.session_state["cg_rw_docx"],
+                file_name="correctgloss_recherche_redaction.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key="cg_rw_download_docx",
+            )
+        if st.session_state.get("cg_rw_pdf"):
+            st.download_button(
+                "Télécharger la rédaction PDF (.pdf)",
+                data=st.session_state["cg_rw_pdf"],
+                file_name="correctgloss_recherche_redaction.pdf",
+                mime="application/pdf",
+                key="cg_rw_download_pdf",
+            )
+
+    st.caption(
+        "Les références repérées par Crossref/OpenAlex sont des métadonnées bibliographiques. "
+        "Leur accès au texte intégral dépend de l'éditeur ou de la disponibilité en libre accès. "
+        "Ne citez que les sources que vous avez effectivement consultées."
+    )
 
 
 # -------------------------------------------------------------------
