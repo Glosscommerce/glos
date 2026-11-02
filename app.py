@@ -87,144 +87,361 @@ def offline_suggestions(content: str):
 
 
 def generate_free_research(task: str, subject: str, context: str, language: str) -> str:
-    """Build academic writing templates locally, without a paid API."""
-    subject = subject.strip()
-    context = context.strip() or "[À compléter avec les informations vérifiées de votre terrain]"
+    """Generate structured academic scaffolds locally; never invent field data or references."""
+    subject = subject.strip() or "[SUJET À PRÉCISER]"
+    context = context.strip() or "[À compléter avec les informations vérifiées du terrain]"
+    task_lower = task.lower()
+
+    # Map labels used by the interface and the full-memory assistant to one template family.
+    if "plan" in task_lower or "rédaction complète" in task_lower:
+        family = "plan"
+    elif "introduction" in task_lower:
+        family = "introduction"
+    elif "problématique" in task_lower or "hypoth" in task_lower or "question" in task_lower:
+        family = "problem"
+    elif "théorique" in task_lower or "littérature" in task_lower or "conceptuel" in task_lower or "définitions" in task_lower:
+        family = "literature"
+    elif "terrain" in task_lower or "organisation" in task_lower or "présentation du terrain" in task_lower:
+        family = "terrain"
+    elif "méthod" in task_lower:
+        family = "methodology"
+    elif "résultat" in task_lower or "analyse des données" in task_lower:
+        family = "results"
+    elif "discussion" in task_lower or "recommandation" in task_lower:
+        family = "discussion"
+    elif "conclusion" in task_lower:
+        family = "conclusion"
+    elif "amélior" in task_lower or "révision" in task_lower:
+        family = "revision"
+    else:
+        family = "problem"
+
     if language == "Français":
-        if task == "Proposer un plan détaillé":
-            return f"""PLAN DÉTAILLÉ — PROPOSITION À ADAPTER
+        templates = {
+            "plan": f"""PLAN DÉTAILLÉ PROPOSÉ — À ADAPTER
 Sujet : {subject}
 
 INTRODUCTION GÉNÉRALE
-- Contexte et justification du sujet
-- Problématique et question principale
-- Objectif général et objectifs spécifiques
-- Hypothèses de recherche
-- Méthodologie et délimitation du terrain
-- Annonce du plan
+1. Contexte général et justification du sujet
+2. Délimitation du sujet (espace, période, secteur)
+3. Constat de départ et intérêt de la recherche
+4. Problématique et question principale
+5. Objectif général et objectifs spécifiques
+6. Hypothèses de recherche
+7. Méthodologie et sources de données
+8. Annonce du plan
 
-PARTIE I — CADRE CONCEPTUEL ET THÉORIQUE
-Chapitre 1 : Définition des concepts clés
-Chapitre 2 : Théories et travaux antérieurs
+PREMIÈRE PARTIE — CADRE CONCEPTUEL ET THÉORIQUE
+Chapitre 1 : Définitions, concepts clés et délimitation
+  1.1 Définition des notions principales
+  1.2 Dimensions et indicateurs des concepts
+  1.3 Relations entre les concepts
+Chapitre 2 : Théories et revue de littérature
+  2.1 Théories et modèles explicatifs
+  2.2 Travaux scientifiques antérieurs
+  2.3 Synthèse critique et lacune de recherche
 
-PARTIE II — CADRE MÉTHODOLOGIQUE ET ANALYSE
-Chapitre 3 : Présentation du terrain et méthodologie
-Chapitre 4 : Présentation et analyse des données collectées
+DEUXIÈME PARTIE — TERRAIN ET DÉMARCHE MÉTHODOLOGIQUE
+Chapitre 3 : Présentation du terrain d'étude
+  3.1 Historique et statut de l'organisation
+  3.2 Activités, organisation et acteurs concernés
+  3.3 Environnement et contexte de l'étude
+Chapitre 4 : Méthodologie de recherche
+  4.1 Type et approche de recherche
+  4.2 Population, échantillon et critères de sélection
+  4.3 Outils et procédure de collecte
+  4.4 Méthodes de traitement et d'analyse
+  4.5 Limites et considérations éthiques
 
-PARTIE III — DISCUSSION ET RECOMMANDATIONS
-Chapitre 5 : Interprétation et discussion des résultats
-Chapitre 6 : Recommandations, limites et perspectives
+TROISIÈME PARTIE — RÉSULTATS, DISCUSSION ET RECOMMANDATIONS
+Chapitre 5 : Présentation et analyse des résultats réels
+Chapitre 6 : Discussion, recommandations et plan d'action
 
 CONCLUSION GÉNÉRALE
-Synthèse, réponse à la problématique et perspectives.
+Réponse à la problématique, bilan des hypothèses, limites et perspectives.
 
-Contexte à intégrer : {context}
-Adaptez ce plan aux exigences de votre établissement et à vos données réelles."""
-        if task == "Rédiger une introduction":
-            return f"""INTRODUCTION — TRAME À COMPLÉTER
+Contexte fourni : {context}
+
+À valider : ce plan est une proposition. Respectez le guide de mémoire de votre établissement et adaptez les parties à votre terrain réel.""",
+            "introduction": f"""INTRODUCTION GÉNÉRALE — TRAME DE RÉDACTION
 Sujet : {subject}
 
-1. Contexte général : présentez le domaine avec des faits vérifiés et des sources datées.
-2. Délimitation : précisez le secteur, l'organisation, la période et la zone étudiés.
-3. Constat : décrivez le problème observé et justifiez le choix du sujet.
-4. Problématique : expliquez précisément la difficulté ou le manque de connaissance.
-5. Question principale : quels facteurs influencent {subject.lower()} dans le contexte étudié ?
-6. Objectif général : analyser {subject.lower()}.
-7. Objectifs spécifiques : décrire la situation, identifier les facteurs, analyser les résultats et proposer des améliorations.
-8. Méthodologie : précisez les méthodes de collecte et d'analyse des données.
-9. Annonce du plan : présentez brièvement les grandes parties.
+1. Contexte général
+Présentez le domaine et son importance à l'aide de faits datés et de sources vérifiables.
+[INSÉRER ICI LES FAITS ET SOURCES VÉRIFIÉS]
 
-Contexte à intégrer : {context}
-Remplacez chaque indication par des informations vérifiées."""
-        if task == "Formuler une problématique et des hypothèses":
-            return f"""PROBLÉMATIQUE ET HYPOTHÈSES — PROPOSITION
+2. Justification et choix du sujet
+Expliquez l'intérêt scientifique, économique, social ou professionnel du sujet.
+
+3. Délimitation de l'étude
+- Délimitation spatiale : [zone / entreprise / organisation]
+- Délimitation temporelle : [période étudiée]
+- Délimitation thématique : [aspects retenus et aspects exclus]
+
+4. Constat et formulation du problème
+Décrivez une situation réellement observée. Distinguez les faits, les opinions et les informations à vérifier.
+
+5. Problématique
+[EXPLIQUER LA DIFFICULTÉ CENTRALE ET LE MANQUE DE CONNAISSANCE À ÉTUDIER]
+
+6. Question principale
+Dans quelle mesure {subject.lower()} se manifeste-t-il dans le contexte étudié ?
+
+7. Objectifs
+Objectif général : analyser {subject.lower()} dans le terrain retenu.
+Objectifs spécifiques :
+- Décrire la situation et les pratiques existantes ;
+- Identifier les facteurs explicatifs ;
+- Analyser les informations collectées ;
+- Proposer des améliorations fondées sur les résultats.
+
+8. Hypothèses
+[FORMULER DES HYPOTHÈSES QUI POURRONT ÊTRE VÉRIFIÉES PAR LES DONNÉES]
+
+9. Méthodologie
+Indiquez l'approche, la population étudiée, les outils de collecte et les méthodes d'analyse réellement utilisés.
+
+10. Annonce du plan
+Présentez brièvement les parties et chapitres du mémoire.
+
+Informations de terrain à intégrer : {context}
+
+Ne conservez aucun crochet dans la version finale sans le remplacer par une information vérifiée.""",
+            "problem": f"""PROBLÉMATIQUE, QUESTIONS DE RECHERCHE ET HYPOTHÈSES
 Sujet : {subject}
 
-Constat de départ : [Décrire la situation observable avec des éléments vérifiables.]
-Problème de recherche : [Expliquer la difficulté ou le manque de connaissance à étudier.]
+A. Constat de départ
+[Décrire un fait observé, sa période, son lieu et la source qui permet de le vérifier.]
 
-Question principale :
-Quels sont les principaux facteurs qui influencent {subject.lower()} dans le terrain retenu ?
+B. Problème de recherche
+[Expliquer l'écart entre la situation actuelle et la situation souhaitée, ou le manque de connaissance.]
 
-Questions spécifiques :
-1. Quelle est la situation actuelle ?
+C. Question principale
+Dans quelle mesure {subject.lower()} influence-t-il / se développe-t-il dans le terrain retenu ?
+
+D. Questions spécifiques
+1. Quelle est la situation actuelle du phénomène étudié ?
 2. Quels facteurs économiques, organisationnels, techniques ou humains interviennent ?
-3. Quelles conséquences ou contraintes peut-on constater ?
-4. Quelles améliorations peuvent être proposées ?
+3. Quelles conséquences et contraintes sont observées ?
+4. Quelles solutions réalistes peuvent être proposées ?
 
-Hypothèses provisoires à vérifier :
-H1 : Les pratiques organisationnelles et opérationnelles influencent la situation étudiée.
-H2 : L'amélioration des méthodes et des ressources pourrait contribuer à de meilleurs résultats.
+E. Objectifs
+Objectif général : analyser le phénomène étudié dans son contexte.
+Objectifs spécifiques : décrire, identifier les facteurs, analyser les données et proposer des recommandations.
 
-Contexte : {context}
-Rendez les hypothèses précises, mesurables et vérifiables à partir de vos données."""
-        if task == "Améliorer un paragraphe académique":
-            return f"""AIDE À LA RÉVISION ACADÉMIQUE
+F. Hypothèses provisoires à tester
+H1 : Les facteurs organisationnels et opérationnels ont une influence sur le phénomène étudié.
+H2 : L'amélioration des pratiques et des ressources pourrait contribuer à de meilleurs résultats.
+Ces hypothèses sont génériques : reformulez-les selon les variables et les données réellement accessibles.
+
+Contexte et terrain fournis : {context}
+
+Vérifiez que chaque hypothèse peut être confirmée ou rejetée à partir d'indicateurs observables.""",
+            "literature": f"""CHAPITRE — CADRE CONCEPTUEL, THÉORIQUE ET REVUE DE LITTÉRATURE
 Sujet : {subject}
 
-Texte / contexte fourni :
+1. Définition des concepts clés
+Pour chaque concept :
+- Donner une définition issue d'un auteur ou d'une institution identifiable ;
+- Présenter la référence complète et la page si disponible ;
+- Comparer les définitions ;
+- Retenir une définition opérationnelle adaptée à l'étude.
+[SOURCE SCIENTIFIQUE À RECHERCHER ET À VÉRIFIER]
+
+2. Dimensions et indicateurs
+Présenter les dimensions observables de chaque concept et les indicateurs qui permettront de les étudier.
+
+3. Théories et modèles explicatifs
+Exposer les théories pertinentes, leurs auteurs, leurs postulats et leurs limites.
+[NE PAS ATTRIBUER UNE THÉORIE À UN AUTEUR SANS SOURCE VÉRIFIÉE]
+
+4. Travaux empiriques antérieurs
+Pour chaque étude : auteur, année, objectif, terrain, méthode, résultats publiés et limites.
+[AJOUTER UNIQUEMENT DES ÉTUDES EFFECTIVEMENT CONSULTÉES]
+
+5. Synthèse critique
+Comparer les résultats des auteurs, relever les convergences et divergences et identifier la lacune à laquelle répond le présent mémoire.
+
+Contexte fourni : {context}
+
+Cette trame ne constitue pas une bibliographie. Recherchez et lisez les documents avant de citer leurs auteurs.""",
+            "terrain": f"""CHAPITRE — PRÉSENTATION DU TERRAIN D'ÉTUDE
+Sujet : {subject}
+
+1. Identification de l'organisation ou de la zone
+- Dénomination officielle : [À FOURNIR]
+- Localisation : [À FOURNIR]
+- Statut juridique / institutionnel : [À VÉRIFIER]
+- Date de création et historique : [SOURCE OU DOCUMENT À FOURNIR]
+
+2. Missions et activités
+Décrire uniquement les activités confirmées par des documents ou des entretiens autorisés.
+
+3. Organisation et fonctionnement
+Présenter l'organigramme, les services, les responsabilités et les circuits de travail à partir d'informations validées.
+
+4. Environnement de l'étude
+Décrire les acteurs, partenaires, clients, fournisseurs, concurrents ou institutions concernés selon le sujet.
+
+5. Lien entre le terrain et la problématique
+Expliquer pourquoi ce terrain permet d'étudier la question de recherche.
+
+Informations réellement fournies : {context}
+
+Ne pas inventer l'historique, les effectifs, le chiffre d'affaires, l'organigramme ou les activités de l'organisation.""",
+            "methodology": f"""CHAPITRE — MÉTHODOLOGIE DE RECHERCHE
+Sujet : {subject}
+
+1. Objectif et logique de la démarche
+Expliquer comment la méthode choisie permet de répondre aux questions de recherche.
+
+2. Approche de recherche
+[QUALITATIVE / QUANTITATIVE / MIXTE — JUSTIFIER LE CHOIX]
+
+3. Population et unité d'analyse
+- Population cible : [À DÉFINIR]
+- Unité d'analyse : [PERSONNE / ENTREPRISE / DOCUMENT / TRANSACTION...]
+- Critères d'inclusion et d'exclusion : [À PRÉCISER]
+
+4. Échantillonnage
+- Méthode : [ALÉATOIRE / RAISONNÉ / EXHAUSTIF / AUTRE]
+- Taille de l'échantillon : [À RENSEIGNER APRÈS DÉFINITION]
+- Justification : [À EXPLIQUER]
+
+5. Techniques et outils de collecte
+Questionnaire, entretien, observation, analyse documentaire ou base de données : préciser ce qui a réellement été utilisé et joindre les outils en annexe.
+
+6. Traitement et analyse
+Décrire les opérations de codage, classement, calcul ou analyse thématique réellement effectuées.
+
+7. Fiabilité, validité et éthique
+Expliquer le contrôle des informations, le consentement, la confidentialité et les limites de la démarche.
+
+Contexte fourni : {context}
+
+Ne déclarez pas qu'une enquête, un entretien ou une observation a été réalisé si ce n'est pas le cas.""",
+            "results": f"""CHAPITRE — PRÉSENTATION ET ANALYSE DES RÉSULTATS
+Sujet : {subject}
+
+IMPORTANT : aucun résultat ne peut être produit sans données réelles. Utilisez la structure ci-dessous après la collecte.
+
+1. Rappel de l'objectif et de la méthode
+[PRÉCISER LA PÉRIODE, LES OUTILS ET LE NOMBRE RÉEL DE RÉPONSES]
+
+2. Présentation des données
+Tableau 1 : [INDICATEUR] | [VALEUR OBSERVÉE] | [SOURCE / PÉRIODE]
+Tableau 2 : [INDICATEUR] | [VALEUR OBSERVÉE] | [SOURCE / PÉRIODE]
+
+3. Analyse descriptive
+Décrire les tendances visibles sans extrapoler au-delà de l'échantillon.
+
+4. Analyse par question ou variable
+Pour chaque question : présenter les données, expliquer ce qu'elles indiquent et signaler les limites.
+
+5. Synthèse des constats
+Distinguer les résultats confirmés, les résultats incertains et les informations manquantes.
+
+Données fournies : {context}
+
+[DONNÉES DE TERRAIN À FOURNIR]
+N'inventez aucun pourcentage, effectif, verbatim d'entretien ou résultat statistique.""",
+            "discussion": f"""CHAPITRE — DISCUSSION ET RECOMMANDATIONS
+Sujet : {subject}
+
+1. Rappel des principaux résultats
+[REPRENDRE UNIQUEMENT LES RÉSULTATS ÉTABLIS DANS LE CHAPITRE PRÉCÉDENT]
+
+2. Interprétation
+Expliquer les résultats en lien avec la problématique, les objectifs et les variables.
+
+3. Comparaison avec la littérature
+Comparer les résultats aux travaux réellement consultés. Expliquer les accords et les différences avec prudence.
+[SOURCE SCIENTIFIQUE À VÉRIFIER]
+
+4. Vérification des hypothèses
+Pour chaque hypothèse : indicateurs examinés, éléments favorables, éléments contraires et conclusion justifiée (confirmée, partiellement confirmée ou rejetée).
+
+5. Recommandations opérationnelles
+Pour chaque recommandation, préciser :
+- Problème ciblé ;
+- Action proposée ;
+- Responsable potentiel ;
+- Ressources nécessaires ;
+- Délai ;
+- Indicateur de suivi.
+
+6. Limites et perspectives
+Présenter les limites des données, de l'échantillon, de la période et de la méthode.
+
+Contexte fourni : {context}
+
+Les recommandations doivent découler des résultats observés et non de suppositions.""",
+            "conclusion": f"""CONCLUSION GÉNÉRALE — TRAME À COMPLÉTER
+Sujet : {subject}
+
+1. Rappeler le contexte, la problématique et l'objectif général.
+2. Résumer brièvement la démarche méthodologique réellement appliquée.
+3. Présenter les principaux résultats vérifiés, sans ajouter de nouvelle donnée.
+4. Répondre directement à la question principale.
+5. Faire le bilan de chaque hypothèse à partir des résultats.
+6. Présenter les recommandations prioritaires.
+7. Reconnaître les limites de l'étude.
+8. Ouvrir sur une perspective de recherche ou d'action.
+
+Résultats et informations fournis : {context}
+
+La conclusion finale doit être rédigée après l'analyse des résultats. Ne prétendez pas répondre à la problématique si les données ne sont pas encore disponibles.""",
+            "revision": f"""AIDE À LA RÉVISION ACADÉMIQUE HORS LIGNE
+Sujet : {subject}
+
+TEXTE FOURNI :
 {context}
 
-Grille de révision :
-1. Formulez une seule idée principale par paragraphe.
-2. Développez cette idée avec un argument clair.
-3. Ajoutez une preuve, un exemple ou une source vérifiable.
-4. Expliquez le lien entre la preuve et la problématique.
-5. Terminez par une transition logique.
+CORRECTIONS AUTOMATIQUES LIMITÉES
+Le système peut corriger quelques formulations répétitives et espaces, mais ne remplace pas une correction grammaticale complète.
 
-Évitez les répétitions, les affirmations sans preuve et les formulations vagues.
-Cette version gratuite fournit une méthode de révision, pas une réécriture automatique par IA."""
-        if task == "Préparer une conclusion":
-            return f"""CONCLUSION — TRAME À COMPLÉTER
-Sujet : {subject}
+GRILLE DE RÉVISION
+1. Une idée principale clairement formulée par paragraphe.
+2. Des arguments appuyés par des preuves ou des sources vérifiables.
+3. Des transitions logiques entre les paragraphes.
+4. Des termes précis et cohérents avec le domaine.
+5. Une distinction claire entre faits, interprétations et opinions.
+6. Des citations et références complètes et vérifiables.
 
-1. Rappelez l'objectif et la démarche méthodologique.
-2. Synthétisez les principaux résultats réellement obtenus.
-3. Répondez directement à la question principale.
-4. Indiquez si chaque hypothèse est confirmée, partiellement confirmée ou rejetée.
-5. Formulez des recommandations liées aux résultats.
-6. Présentez les limites et les perspectives de recherche.
+PROPOSITIONS DE STYLE
+- Remplacer les formulations vagues par des termes précis.
+- Éviter les répétitions et les phrases trop longues.
+- Ne pas transformer une hypothèse en résultat.
+- Conserver le sens original de l'auteur.
 
-Résultats et contexte à intégrer : {context}
-N'ajoutez pas de nouvelles données non analysées dans le mémoire."""
-        return f"""QUESTIONS DE RECHERCHE
-Sujet : {subject}
+Texte révisé mécaniquement :
+{offline_rewrite(context)}
 
-Question principale :
-Quels sont les facteurs, les effets et les pistes d'amélioration liés à {subject.lower()} ?
+Relisez chaque modification : une reformulation automatique simple peut changer le sens d'une phrase."""
+        }
+        result = templates[family]
+        if family not in ("revision",):
+            result += "\n\n" + "FICHE DE CONTRÔLE AVANT VALIDATION\n- Vérifier les faits et les dates.\n- Ajouter les sources réellement consultées.\n- Remplacer les champs entre crochets.\n- Vérifier la cohérence avec la problématique et les consignes de l'établissement."
+        return result
 
-Questions spécifiques :
-1. Quelle est la situation actuelle sur le terrain ?
-2. Quels sont les acteurs concernés et leurs rôles ?
-3. Quels facteurs expliquent la situation observée ?
-4. Quelles contraintes et opportunités ressortent de l'étude ?
-5. Quelles actions pourraient améliorer la situation ?
-
-Contexte : {context}
-Rendez chaque question précise, réalisable et cohérente avec votre méthodologie."""
-    # For other selected languages, return a useful outline and clearly state the language limitation.
-    return f"""FREE OFFLINE ACADEMIC TEMPLATE
+    return f"""OFFLINE ACADEMIC WORKSHEET
 Topic: {subject}
 Selected language: {language}
+Requested section: {task}
 
-Task: {task}
+1. Background and verified context: [ADD VERIFIED FACTS AND SOURCES]
+2. Research problem: [DEFINE THE SPECIFIC PROBLEM]
+3. Main and specific research questions: [COMPLETE]
+4. General and specific objectives: [COMPLETE]
+5. Working hypotheses and measurable indicators: [COMPLETE IF REQUIRED]
+6. Study area, population and methodology: [ADD REAL INFORMATION]
+7. Findings: [INSERT ONLY COLLECTED AND VERIFIED DATA]
+8. Discussion, recommendations and conclusion: [COMPLETE AFTER ANALYSIS]
 
-Suggested structure:
-1. Background and context
-2. Research problem and main question
-3. General and specific objectives
-4. Working hypotheses (if required)
-5. Methodology and study area
-6. Analysis of verified findings
-7. Recommendations and limitations
-8. Conclusion
-
-Context to use:
+Context supplied:
 {context}
 
-Note: This free offline template is currently provided in French/English headings only. Adapt the wording into {language} and verify all facts, data and references before using it."""
-
-
+This is an offline worksheet, not an automatically written academic chapter. Translate and adapt it into {language}; do not invent facts, results, authors or references."""
 
 def search_academic_sources(query: str, limit: int = 6):
     """Search Crossref and OpenAlex for real scholarly metadata; never invent references."""
@@ -324,13 +541,13 @@ def make_research_docx(title: str, body: str, sources: list):
     return doc
 
 def offline_rewrite(text: str) -> str:
-    """Apply a few transparent local text cleanups; no AI service required."""
-    cleaned = re.sub(r"[ \\t]+", " ", text.strip())
-    cleaned = re.sub(r"\\n{3,}", "\\n\\n", cleaned)
+    """Apply conservative, transparent local cleanups without an AI service."""
+    cleaned = re.sub(r"[ \t]+", " ", text.strip())
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     for pattern, replacement in [
-        (r"\\bau jour d'aujourd'hui\\b", "aujourd'hui"),
-        (r"\\bmalgré que\\b", "bien que"),
-        (r"\\bon peut voir que\\b", "les résultats montrent que"),
+        (r"\bau jour d'aujourd'hui\b", "aujourd'hui"),
+        (r"\bmalgré que\b", "bien que"),
+        (r"\bon peut voir que\b", "les résultats montrent que"),
     ]:
         cleaned = re.sub(pattern, replacement, cleaned, flags=re.I)
     return cleaned
@@ -680,9 +897,8 @@ elif page == "Correction":
 elif page == "Recherche & rédaction":
     st.header("Recherche & rédaction complète")
     st.info(
-        "Préparez votre travail par étapes, recherchez des références réelles, "
-        "puis exportez le contenu en Word et PDF. Sans clé IA active, le mode gratuit "
-        "fournit une trame académique détaillée et des consignes de rédaction, pas un mémoire final rédigé automatiquement."
+        "Mode gratuit hors ligne : construisez votre plan, problématique, hypothèses, méthodologie et chapitres à partir de trames détaillées. "
+        "Aucun crédit OpenAI n'est nécessaire. Les données de terrain, résultats et références doivent être fournis et vérifiés par l'utilisateur."
     )
     left, right = st.columns(2)
     with left:
@@ -755,29 +971,20 @@ Consignes :
 - N'affirme jamais qu'une hypothèse est validée sans données.
 - Assure la cohérence avec le sujet, le niveau et le terrain.
 """
-                if get_secret("OPENAI_API_KEY"):
-                    try:
-                        with st.spinner("Rédaction de la partie en cours..."):
-                            section_result = call_ai(full_prompt)
-                        st.session_state["cg_full_sections"][selected_stage] = section_result
-                        st.success("Partie générée et sauvegardée dans le projet.")
-                    except Exception as exc:
-                        st.error(f"Service IA indisponible : {exc}")
-                else:
-                    st.session_state["cg_full_sections"][selected_stage] = (
-                        generate_free_research(
-                            "Proposer un plan détaillé" if selected_stage.startswith("Chapitre") else selected_stage,
-                            subject,
-                            (context + "\n" + stage_details).strip(),
-                            language_out,
-                        )
-                        + "\n\n[MODE HORS LIGNE : trame indicative uniquement. "
-                        "Une rédaction complète nécessite un service IA et des informations vérifiées.]"
-                    )
-                    st.warning(
-                        "Mode hors ligne : une trame est sauvegardée, pas un chapitre entièrement rédigé. "
-                        "Les données de terrain doivent être fournies et vérifiées."
-                    )
+                stage_context = "\n".join([
+                    "Type : " + work_type,
+                    "Niveau : " + level,
+                    "Domaine : " + (field or "[À préciser]"),
+                    "Terrain : " + (study_area or "[À préciser]"),
+                    "Contexte : " + (context or "[À compléter]"),
+                    "Précisions : " + (stage_details or "[À compléter]"),
+                    "Volume cible : " + str(pages) + " pages pour l'ensemble du document",
+                ])
+                st.session_state["cg_full_sections"][selected_stage] = generate_free_research(
+                    selected_stage, subject, stage_context, language_out
+                )
+                st.success("Trame structurée créée hors ligne et sauvegardée. Complétez-la avec vos informations vérifiées.")
+                st.info("Aucune rédaction IA payante n'est appelée dans ce module. Les chapitres de résultats restent à compléter avec vos données réelles.")
 
         saved_sections = st.session_state["cg_full_sections"]
         st.caption(f"Parties sauvegardées : {len(saved_sections)} / {len(full_stages)}")
@@ -909,49 +1116,39 @@ hypothèses des résultats réellement observés. Si les données manquent, indi
 explicitement les éléments que l'étudiant doit collecter. Fournis un texte structuré
 avec des titres hiérarchisés. Ne prétends pas que le nombre de pages est garanti.
 """
-            api_key = get_secret("OPENAI_API_KEY")
-            if api_key:
-                try:
-                    with st.spinner("Rédaction IA de la section en cours..."):
-                        generated = call_ai(prompt)
-                    st.session_state["cg_research_output"] = generated
-                    st.success("Section générée. Relisez et vérifiez les informations et les références.")
-                    log_app_event("research_writing_ai")
-                except Exception as exc:
-                    st.error(f"Rédaction IA indisponible : {exc}. Le mode gratuit reste disponible avec une trame.")
-                    st.session_state["cg_research_output"] = generate_free_research("Proposer un plan détaillé", subject, context, language_out)
+            if task == "Améliorer un texte académique fourni" and supplied_text.strip():
+                generated = generate_free_research(
+                    "Améliorer un paragraphe académique",
+                    subject,
+                    supplied_text,
+                    language_out,
+                )
             else:
-                if task == "Améliorer un texte académique fourni" and supplied_text.strip():
-                    generated = (
-                        "AIDE À L'AMÉLIORATION ACADÉMIQUE\n\n"
-                        + offline_rewrite(supplied_text)
-                        + "\n\nÀ vérifier : exactitude des faits, cohérence des arguments, citations et références."
-                    )
-                else:
-                    generated = generate_free_research(
-                        "Proposer un plan détaillé" if task in ("Construire le plan détaillé complet", "Préparer la rédaction complète par étapes") else task,
-                        subject,
-                        context + "\nType : " + work_type + "\nNiveau : " + level
-                        + "\nFilière : " + field + "\nTerrain : " + study_area
-                        + "\nNombre de pages visé : " + str(pages)
-                        + "\nSection demandée : " + (chapter or task),
-                        language_out,
-                    )
-                    generated = (
-                        f"TRAME DE RÉDACTION — {task.upper()}\n"
-                        f"Sujet : {subject}\nType : {work_type} • Niveau : {level} • Objectif : {pages} pages\n\n"
-                        + generated
-                        + "\n\nDÉVELOPPEMENT À COMPLÉTER\n"
-                        "Pour atteindre le volume demandé, développez chaque sous-partie avec : "
-                        "une définition appuyée par une source vérifiée, une explication, "
-                        "un exemple lié au terrain, une donnée collectée et une courte synthèse.\n\n"
-                        "ATTENTION : cette sortie hors ligne est une trame structurée, "
-                        "pas un mémoire complet rédigé ni une preuve documentaire. "
-                        "Ajoutez vos données réelles et vérifiez chaque référence."
-                    )
-                st.session_state["cg_research_output"] = generated
-                st.info("Mode gratuit hors ligne : trame détaillée générée. La rédaction longue automatique nécessite une IA disponible.")
-                log_app_event("research_writing_free")
+                generated = generate_free_research(
+                    task,
+                    subject,
+                    "\n".join([
+                        context,
+                        "Type : " + work_type,
+                        "Niveau : " + level,
+                        "Filière : " + field,
+                        "Terrain : " + study_area,
+                        "Nombre de pages visé : " + str(pages),
+                        "Section demandée : " + (chapter or task),
+                    ]),
+                    language_out,
+                )
+                generated = (
+                    f"TRAME HORS LIGNE — {task.upper()}\n"
+                    f"Sujet : {subject}\nType : {work_type} • Niveau : {level} • Volume visé : {pages} pages\n\n"
+                    + generated
+                    + "\n\nDÉVELOPPEMENT À COMPLÉTER\n"
+                    "Développez chaque sous-partie avec une explication, une source réellement consultée, "
+                    "un exemple pertinent et, lorsque nécessaire, une donnée collectée sur le terrain."
+                )
+            st.session_state["cg_research_output"] = generated
+            st.info("Mode gratuit hors ligne activé : aucun appel à l'API OpenAI n'est effectué pour la Recherche & rédaction.")
+            log_app_event("research_writing_free")
 
     output = st.session_state.get("cg_research_output", "")
     if output:
