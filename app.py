@@ -768,10 +768,10 @@ Consignes :
                         generate_free_research(
                             "Proposer un plan détaillé" if selected_stage.startswith("Chapitre") else selected_stage,
                             subject,
-                            (context + "\\n" + stage_details).strip(),
+                            (context + "\n" + stage_details).strip(),
                             language_out,
                         )
-                        + "\\n\\n[MODE HORS LIGNE : trame indicative uniquement. "
+                        + "\n\n[MODE HORS LIGNE : trame indicative uniquement. "
                         "Une rédaction complète nécessite un service IA et des informations vérifiées.]"
                     )
                     st.warning(
@@ -798,8 +798,8 @@ Consignes :
                     st.markdown(f"**{saved_title}**")
                     st.caption(f"{len(saved_body.split())} mots")
             if st.button("Assembler le mémoire en Word et PDF", key="cg_full_assemble"):
-                assembled = "\\n\\n".join(
-                    title.upper() + "\\n\\n" + saved_sections[title]
+                assembled = "\n\n".join(
+                    title.upper() + "\n\n" + saved_sections[title]
                     for title in full_stages if title in saved_sections
                 )
                 assembled_doc = make_research_docx(subject or "Mémoire", assembled, sources)
