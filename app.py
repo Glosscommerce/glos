@@ -78,6 +78,159 @@ def offline_suggestions(content: str):
     return found
 
 
+
+def generate_free_research(task: str, subject: str, context: str, language: str) -> str:
+    """Build academic writing templates locally, without a paid API."""
+    subject = subject.strip()
+    context = context.strip() or "[À compléter avec les informations vérifiées de votre terrain]"
+    if language == "Français":
+        if task == "Proposer un plan détaillé":
+            return f"""PLAN DÉTAILLÉ — PROPOSITION À ADAPTER
+Sujet : {subject}
+
+INTRODUCTION GÉNÉRALE
+- Contexte et justification du sujet
+- Problématique et question principale
+- Objectif général et objectifs spécifiques
+- Hypothèses de recherche
+- Méthodologie et délimitation du terrain
+- Annonce du plan
+
+PARTIE I — CADRE CONCEPTUEL ET THÉORIQUE
+Chapitre 1 : Définition des concepts clés
+Chapitre 2 : Théories et travaux antérieurs
+
+PARTIE II — CADRE MÉTHODOLOGIQUE ET ANALYSE
+Chapitre 3 : Présentation du terrain et méthodologie
+Chapitre 4 : Présentation et analyse des données collectées
+
+PARTIE III — DISCUSSION ET RECOMMANDATIONS
+Chapitre 5 : Interprétation et discussion des résultats
+Chapitre 6 : Recommandations, limites et perspectives
+
+CONCLUSION GÉNÉRALE
+Synthèse, réponse à la problématique et perspectives.
+
+Contexte à intégrer : {context}
+Adaptez ce plan aux exigences de votre établissement et à vos données réelles."""
+        if task == "Rédiger une introduction":
+            return f"""INTRODUCTION — TRAME À COMPLÉTER
+Sujet : {subject}
+
+1. Contexte général : présentez le domaine avec des faits vérifiés et des sources datées.
+2. Délimitation : précisez le secteur, l'organisation, la période et la zone étudiés.
+3. Constat : décrivez le problème observé et justifiez le choix du sujet.
+4. Problématique : expliquez précisément la difficulté ou le manque de connaissance.
+5. Question principale : quels facteurs influencent {subject.lower()} dans le contexte étudié ?
+6. Objectif général : analyser {subject.lower()}.
+7. Objectifs spécifiques : décrire la situation, identifier les facteurs, analyser les résultats et proposer des améliorations.
+8. Méthodologie : précisez les méthodes de collecte et d'analyse des données.
+9. Annonce du plan : présentez brièvement les grandes parties.
+
+Contexte à intégrer : {context}
+Remplacez chaque indication par des informations vérifiées."""
+        if task == "Formuler une problématique et des hypothèses":
+            return f"""PROBLÉMATIQUE ET HYPOTHÈSES — PROPOSITION
+Sujet : {subject}
+
+Constat de départ : [Décrire la situation observable avec des éléments vérifiables.]
+Problème de recherche : [Expliquer la difficulté ou le manque de connaissance à étudier.]
+
+Question principale :
+Quels sont les principaux facteurs qui influencent {subject.lower()} dans le terrain retenu ?
+
+Questions spécifiques :
+1. Quelle est la situation actuelle ?
+2. Quels facteurs économiques, organisationnels, techniques ou humains interviennent ?
+3. Quelles conséquences ou contraintes peut-on constater ?
+4. Quelles améliorations peuvent être proposées ?
+
+Hypothèses provisoires à vérifier :
+H1 : Les pratiques organisationnelles et opérationnelles influencent la situation étudiée.
+H2 : L'amélioration des méthodes et des ressources pourrait contribuer à de meilleurs résultats.
+
+Contexte : {context}
+Rendez les hypothèses précises, mesurables et vérifiables à partir de vos données."""
+        if task == "Améliorer un paragraphe académique":
+            return f"""AIDE À LA RÉVISION ACADÉMIQUE
+Sujet : {subject}
+
+Texte / contexte fourni :
+{context}
+
+Grille de révision :
+1. Formulez une seule idée principale par paragraphe.
+2. Développez cette idée avec un argument clair.
+3. Ajoutez une preuve, un exemple ou une source vérifiable.
+4. Expliquez le lien entre la preuve et la problématique.
+5. Terminez par une transition logique.
+
+Évitez les répétitions, les affirmations sans preuve et les formulations vagues.
+Cette version gratuite fournit une méthode de révision, pas une réécriture automatique par IA."""
+        if task == "Préparer une conclusion":
+            return f"""CONCLUSION — TRAME À COMPLÉTER
+Sujet : {subject}
+
+1. Rappelez l'objectif et la démarche méthodologique.
+2. Synthétisez les principaux résultats réellement obtenus.
+3. Répondez directement à la question principale.
+4. Indiquez si chaque hypothèse est confirmée, partiellement confirmée ou rejetée.
+5. Formulez des recommandations liées aux résultats.
+6. Présentez les limites et les perspectives de recherche.
+
+Résultats et contexte à intégrer : {context}
+N'ajoutez pas de nouvelles données non analysées dans le mémoire."""
+        return f"""QUESTIONS DE RECHERCHE
+Sujet : {subject}
+
+Question principale :
+Quels sont les facteurs, les effets et les pistes d'amélioration liés à {subject.lower()} ?
+
+Questions spécifiques :
+1. Quelle est la situation actuelle sur le terrain ?
+2. Quels sont les acteurs concernés et leurs rôles ?
+3. Quels facteurs expliquent la situation observée ?
+4. Quelles contraintes et opportunités ressortent de l'étude ?
+5. Quelles actions pourraient améliorer la situation ?
+
+Contexte : {context}
+Rendez chaque question précise, réalisable et cohérente avec votre méthodologie."""
+    # For other selected languages, return a useful outline and clearly state the language limitation.
+    return f"""FREE OFFLINE ACADEMIC TEMPLATE
+Topic: {subject}
+Selected language: {language}
+
+Task: {task}
+
+Suggested structure:
+1. Background and context
+2. Research problem and main question
+3. General and specific objectives
+4. Working hypotheses (if required)
+5. Methodology and study area
+6. Analysis of verified findings
+7. Recommendations and limitations
+8. Conclusion
+
+Context to use:
+{context}
+
+Note: This free offline template is currently provided in French/English headings only. Adapt the wording into {language} and verify all facts, data and references before using it."""
+
+
+def offline_rewrite(text: str) -> str:
+    """Apply a few transparent local text cleanups; no AI service required."""
+    cleaned = re.sub(r"[ \\t]+", " ", text.strip())
+    cleaned = re.sub(r"\\n{3,}", "\\n\\n", cleaned)
+    for pattern, replacement in [
+        (r"\\bau jour d'aujourd'hui\\b", "aujourd'hui"),
+        (r"\\bmalgré que\\b", "bien que"),
+        (r"\\bon peut voir que\\b", "les résultats montrent que"),
+    ]:
+        cleaned = re.sub(pattern, replacement, cleaned, flags=re.I)
+    return cleaned
+
+
 def call_ai(prompt: str) -> str:
     key = get_secret("OPENAI_API_KEY")
     if not key:
@@ -367,8 +520,9 @@ elif page == "Correction":
 elif page == "Recherche & rédaction":
     st.header("Recherche & rédaction")
     st.info(
-        "L'IA peut aider à structurer et améliorer un travail, mais les "
-        "informations, chiffres et références doivent être vérifiés."
+        "Mode gratuit hors ligne : les propositions utilisent des modèles académiques intégrés. "
+        "Aucune clé API ni aucun crédit OpenAI ne sont nécessaires. Vérifiez toujours les faits, "
+        "chiffres et références."
     )
     task = st.selectbox(
         "Type de travail",
@@ -395,28 +549,15 @@ elif page == "Recherche & rédaction":
         if not subject.strip():
             st.warning("Veuillez saisir le sujet de votre travail.")
         else:
-            prompt = (
-                f"Tu es un assistant de rédaction académique. "
-                f"Langue demandée : {language_out}. "
-                f"Type de travail : {task}. Sujet : {subject}. "
-                f"Contexte et consignes : {context}. "
-                "Produis une proposition structurée, claire et adaptée au niveau "
-                "universitaire. N'invente aucune source, statistique, citation "
-                "ou donnée de terrain. Signale explicitement les éléments qui "
-                "doivent être complétés ou vérifiés."
-            )
             try:
-                with st.spinner("Préparation du contenu..."):
-                    output = call_ai(prompt)
+                with st.spinner("Préparation du contenu hors ligne..."):
+                    output = generate_free_research(task, subject, context, language_out)
                 st.session_state["cg_research_output"] = output
-                st.text_area(
-                    "Résultat à relire et vérifier",
-                    output,
-                    height=420,
-                )
-                log_app_event("research_writing")
+                st.text_area("Résultat à relire et compléter", output, height=420)
+                st.success("Proposition créée en mode gratuit, sans clé API ni crédit OpenAI.")
+                log_app_event("research_writing_free")
             except Exception as exc:
-                st.error(f"Erreur lors de la génération : {exc}")
+                st.error(f"Erreur lors de la génération hors ligne : {exc}")
 
     if st.session_state.get("cg_research_output"):
         st.download_button(
