@@ -797,6 +797,7 @@ avec des titres hiérarchisés. Ne prétends pas que le nombre de pages est gara
                     log_app_event("research_writing_ai")
                 except Exception as exc:
                     st.error(f"Rédaction IA indisponible : {exc}. Le mode gratuit reste disponible avec une trame.")
+                    st.session_state["cg_research_output"] = generate_free_research("Proposer un plan détaillé", subject, context, language_out)
             else:
                 if task == "Améliorer un texte académique fourni" and supplied_text.strip():
                     generated = (
