@@ -705,6 +705,128 @@ elif page == "Recherche & rédaction":
             key="cg_rw_context",
         )
 
+
+    # Assistant de mémoire complet : génération et sauvegarde section par section.
+    with st.expander("Assistant mémoire complet — construire le document étape par étape", expanded=True):
+        st.write(
+            "Rédigez chaque partie séparément. Les sections validées sont conservées "
+            "pendant la session et peuvent être assemblées dans un seul document."
+        )
+        full_stages = [
+            "Introduction générale",
+            "Chapitre 1 — Cadre conceptuel et définitions",
+            "Chapitre 2 — Cadre théorique et revue de littérature",
+            "Chapitre 3 — Présentation du terrain d'étude",
+            "Chapitre 4 — Méthodologie de recherche",
+            "Chapitre 5 — Présentation et analyse des résultats",
+            "Chapitre 6 — Discussion et recommandations",
+            "Conclusion générale",
+        ]
+        selected_stage = st.selectbox(
+            "Partie du mémoire à rédiger", full_stages, key="cg_full_stage"
+        )
+        stage_details = st.text_area(
+            "Précisions propres à cette partie (facultatif)",
+            placeholder="Ex. données disponibles, consignes de l'encadreur, période étudiée...",
+            key="cg_full_stage_details",
+            height=90,
+        )
+        if "cg_full_sections" not in st.session_state:
+            st.session_state["cg_full_sections"] = {}
+        if st.button("Générer cette partie", type="primary", key="cg_full_generate"):
+            if not subject.strip():
+                st.warning("Saisissez d'abord le sujet du mémoire.")
+            else:
+                full_prompt = f"""
+Tu es un assistant de rédaction universitaire. Rédige uniquement la partie suivante :
+{selected_stage}
+Sujet : {subject}
+Type : {work_type}; niveau : {level}; domaine : {field or 'à préciser'}
+Terrain : {study_area or 'à préciser'}
+Langue : {language_out}
+Contexte général et données réellement fournies : {context or 'Aucune donnée de terrain fournie'}
+Précisions sur cette partie : {stage_details or 'Aucune'}
+Longueur indicative : {max(500, int(pages * 250 / len(full_stages)))} mots.
+Consignes :
+- Structure avec titres et sous-titres cohérents et rédaction académique.
+- Ne fabrique aucun chiffre, résultat d'enquête, entretien, auteur, citation ou référence.
+- Pour les faits à documenter, indique [SOURCE À VÉRIFIER].
+- Pour les résultats empiriques absents, indique clairement [DONNÉES DE TERRAIN À FOURNIR].
+- N'affirme jamais qu'une hypothèse est validée sans données.
+- Assure la cohérence avec le sujet, le niveau et le terrain.
+"""
+                if get_secret("OPENAI_API_KEY"):
+                    try:
+                        with st.spinner("Rédaction de la partie en cours..."):
+                            section_result = call_ai(full_prompt)
+                        st.session_state["cg_full_sections"][selected_stage] = section_result
+                        st.success("Partie générée et sauvegardée dans le projet.")
+                    except Exception as exc:
+                        st.error(f"Service IA indisponible : {exc}")
+                else:
+                    st.session_state["cg_full_sections"][selected_stage] = (
+                        generate_free_research(
+                            "Proposer un plan détaillé" if selected_stage.startswith("Chapitre") else selected_stage,
+                            subject,
+                            (context + "\\n" + stage_details).strip(),
+                            language_out,
+                        )
+                        + "\\n\\n[MODE HORS LIGNE : trame indicative uniquement. "
+                        "Une rédaction complète nécessite un service IA et des informations vérifiées.]"
+                    )
+                    st.warning(
+                        "Mode hors ligne : une trame est sauvegardée, pas un chapitre entièrement rédigé. "
+                        "Les données de terrain doivent être fournies et vérifiées."
+                    )
+
+        saved_sections = st.session_state["cg_full_sections"]
+        st.caption(f"Parties sauvegardées : {len(saved_sections)} / {len(full_stages)}")
+        if selected_stage in saved_sections:
+            edited_section = st.text_area(
+                "Relire et modifier la partie sélectionnée",
+                value=saved_sections[selected_stage],
+                height=280,
+                key="cg_full_editor_" + str(full_stages.index(selected_stage)),
+            )
+            if st.button("Enregistrer mes modifications", key="cg_full_save_section"):
+                saved_sections[selected_stage] = edited_section
+                st.session_state["cg_full_sections"] = saved_sections
+                st.success("Modifications enregistrées.")
+        if saved_sections:
+            with st.expander("Voir les parties déjà sauvegardées"):
+                for saved_title, saved_body in saved_sections.items():
+                    st.markdown(f"**{saved_title}**")
+                    st.caption(f"{len(saved_body.split())} mots")
+            if st.button("Assembler le mémoire en Word et PDF", key="cg_full_assemble"):
+                assembled = "\\n\\n".join(
+                    title.upper() + "\\n\\n" + saved_sections[title]
+                    for title in full_stages if title in saved_sections
+                )
+                assembled_doc = make_research_docx(subject or "Mémoire", assembled, sources)
+                docx_io = io.BytesIO()
+                assembled_doc.save(docx_io)
+                st.session_state["cg_full_docx"] = docx_io.getvalue()
+                st.session_state["cg_full_pdf"] = document_to_pdf_bytes(
+                    assembled_doc, "Times New Roman", 12, "1.5", 2.5, True
+                )
+                st.success("Mémoire assemblé. Vérifiez les titres, les références et les données avant utilisation.")
+        if st.session_state.get("cg_full_docx"):
+            st.download_button(
+                "Télécharger le mémoire complet (.docx)",
+                data=st.session_state["cg_full_docx"],
+                file_name="correctgloss_memoire_complet.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key="cg_full_download_docx",
+            )
+        if st.session_state.get("cg_full_pdf"):
+            st.download_button(
+                "Télécharger le mémoire complet (.pdf)",
+                data=st.session_state["cg_full_pdf"],
+                file_name="correctgloss_memoire_complet.pdf",
+                mime="application/pdf",
+                key="cg_full_download_pdf",
+            )
+
     st.caption(f"Estimation indicative : environ {pages * 250:,} mots pour {pages} pages, selon la mise en page et les exigences de votre établissement.".replace(",", " "))
     st.subheader("1. Recherche de livres et articles scientifiques")
     source_query = st.text_input(
