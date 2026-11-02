@@ -891,6 +891,9 @@ elif page == "Correction":
             )
 
             if st.button("Corriger automatiquement le document", type="primary", key="cg_run_auto_correction"):
+                st.session_state.pop("cg_corrected_docx", None)
+                st.session_state.pop("cg_correction_changes", None)
+                st.session_state.pop("cg_correction_filename", None)
                 if mode == "Correction automatique (LanguageTool en ligne)":
                     language_code = "fr" if language == "Français" else "en-US"
                     try:
