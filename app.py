@@ -294,7 +294,7 @@ def make_research_docx(title: str, body: str, sources: list):
     """Create a clean Word document from generated research text and verified metadata."""
     doc = Document()
     doc.add_heading(title or "Travail académique", 0)
-    for block in re.split(r"\\n\\s*\\n", body.strip()):
+    for block in re.split(r"\n\s*\n", body.strip()):
         block = block.strip()
         if not block:
             continue
@@ -806,7 +806,7 @@ avec des titres hiérarchisés. Ne prétends pas que le nombre de pages est gara
                     )
                 else:
                     generated = generate_free_research(
-                        "Proposer un plan détaillé" if task == "Construire le plan détaillé complet" else task,
+                        "Proposer un plan détaillé" if task in ("Construire le plan détaillé complet", "Préparer la rédaction complète par étapes") else task,
                         subject,
                         context + "\nType : " + work_type + "\nNiveau : " + level
                         + "\nFilière : " + field + "\nTerrain : " + study_area
