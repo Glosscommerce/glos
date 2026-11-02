@@ -9,6 +9,13 @@ import streamlit as st
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from xml.sax.saxutils import escape as xml_escape
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_LEFT, TA_JUSTIFY
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 APP_NAME = "CORRECTGLOSS"
 APP_VERSION = "0.5"
@@ -270,6 +277,61 @@ def add_word_toc(document):
     body.remove(paragraph._p)
     body.insert(0, paragraph._p)
     return document
+
+
+def document_to_pdf_bytes(document, font_name: str, font_size: int, line_spacing: str, margin_cm: float, justify: bool) -> bytes:
+    """Convert a python-docx document to a simple, readable A4 PDF."""
+    output = io.BytesIO()
+    margin = margin_cm * cm
+    pdf = SimpleDocTemplate(
+        output, pagesize=A4, rightMargin=margin, leftMargin=margin,
+        topMargin=margin, bottomMargin=margin, title="Document CORRECTGLOSS",
+    )
+    base = getSampleStyleSheet()
+    pdf_font = "Times-Roman" if font_name == "Times New Roman" else "Helvetica"
+    leading = int(font_size * float(line_spacing))
+    body_style = ParagraphStyle(
+        "CGBody", parent=base["BodyText"], fontName=pdf_font,
+        fontSize=font_size, leading=leading,
+        alignment=TA_JUSTIFY if justify else TA_LEFT, spaceAfter=6,
+    )
+    heading_styles = {
+        level: ParagraphStyle(
+            f"CGHeading{level}", parent=base["Heading1"], fontName=pdf_font,
+            fontSize=max(font_size, 16 - level), leading=max(font_size + 3, 19 - level),
+            spaceBefore=10, spaceAfter=6, keepWithNext=True,
+        )
+        for level in range(1, 4)
+    }
+    story = []
+    for paragraph in document.paragraphs:
+        raw = paragraph.text.strip()
+        if not raw:
+            story.append(Spacer(1, leading * 0.35))
+            continue
+        style_name = (paragraph.style.name if paragraph.style else "").lower()
+        match = re.search(r"(\d+)", style_name) if style_name.startswith("heading") else None
+        level = min(int(match.group(1)), 3) if match else (1 if style_name.startswith("heading") else 0)
+        safe_text = xml_escape(raw).replace("\n", "<br/>")
+        story.append(Paragraph(safe_text, heading_styles[level] if level else body_style))
+    for table in document.tables:
+        rows = [
+            [Paragraph(xml_escape(cell.text).replace("\n", "<br/>"), body_style) for cell in row.cells]
+            for row in table.rows
+        ]
+        if rows:
+            pdf_table = Table(rows, repeatRows=1, hAlign="LEFT")
+            pdf_table.setStyle(TableStyle([
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            story.extend([pdf_table, Spacer(1, 8)])
+    pdf.build(story)
+    return output.getvalue()
 
 
 def admin_dashboard():
@@ -572,26 +634,22 @@ elif page == "Recherche & rédaction":
 # PAGE: EXPORT
 # -------------------------------------------------------------------
 elif page == "Export":
-    st.header("Export et mise en page Word")
-    st.write("Importez un fichier Word, puis choisissez les paramètres de mise en page.")
+    st.header("Export Word et PDF")
+    st.write("Importez un document Word, choisissez la mise en page, puis téléchargez les versions DOCX et PDF.")
     uploaded_export = st.file_uploader(
-        "Importer le document Word (.docx)",
-        type=["docx"],
-        key="export_upload",
+        "Importer le document Word (.docx)", type=["docx"], key="export_upload",
     )
     col1, col2 = st.columns(2)
     with col1:
         font = st.selectbox("Police", ["Times New Roman", "Arial", "Calibri"])
         font_size = st.number_input("Taille (pt)", 10, 14, 12)
-        line_spacing = st.selectbox(
-            "Interligne", ["1.0", "1.15", "1.5", "2.0"], index=2
-        )
+        line_spacing = st.selectbox("Interligne", ["1.0", "1.15", "1.5", "2.0"], index=2)
     with col2:
         margin_cm = st.number_input("Marges (cm)", 1.5, 4.0, 2.5, 0.25)
         justify = st.checkbox("Justifier le texte", True)
-        add_toc = st.checkbox("Ajouter une table des matières automatique", True)
+        add_toc = st.checkbox("Ajouter une table des matières automatique (Word uniquement)", True)
 
-    if uploaded_export and st.button("Préparer le DOCX", type="primary"):
+    if uploaded_export and st.button("Préparer Word et PDF", type="primary"):
         try:
             formatted = Document(io.BytesIO(uploaded_export.getvalue()))
             for section in formatted.sections:
@@ -599,8 +657,7 @@ elif page == "Export":
                 section.left_margin = section.right_margin = Inches(margin_cm / 2.54)
             for paragraph in formatted.paragraphs:
                 if justify and not (
-                    paragraph.style
-                    and paragraph.style.name.lower().startswith("heading")
+                    paragraph.style and paragraph.style.name.lower().startswith("heading")
                 ):
                     paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 paragraph.paragraph_format.line_spacing = float(line_spacing)
@@ -610,27 +667,37 @@ elif page == "Export":
                     run.font.size = Pt(int(font_size))
             if add_toc:
                 formatted = add_word_toc(formatted)
-            output = io.BytesIO()
-            formatted.save(output)
-            st.session_state["cg_export_docx"] = output.getvalue()
-            st.success(
-                "Document Word préparé. Dans Word, faites clic droit sur la "
-                "table des matières puis « Mettre à jour les champs »."
+            word_output = io.BytesIO()
+            formatted.save(word_output)
+            pdf_output = document_to_pdf_bytes(
+                formatted, font, int(font_size), line_spacing, margin_cm, justify
             )
-            log_app_event("docx_export_prepared")
+            st.session_state["cg_export_docx"] = word_output.getvalue()
+            st.session_state["cg_export_pdf"] = pdf_output
+            st.success("Les deux fichiers sont prêts au téléchargement.")
+            log_app_event("docx_pdf_export_prepared")
         except Exception as exc:
-            st.error(f"Erreur pendant la préparation du document : {exc}")
+            st.error(f"Erreur pendant la préparation des fichiers : {exc}")
 
     if st.session_state.get("cg_export_docx"):
         st.download_button(
-            "Télécharger le DOCX",
+            "Télécharger le Word (.docx)",
             data=st.session_state["cg_export_docx"],
             file_name="correctgloss_document_formate.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
+    if st.session_state.get("cg_export_pdf"):
+        st.download_button(
+            "Télécharger le PDF (.pdf)",
+            data=st.session_state["cg_export_pdf"],
+            file_name="correctgloss_document_formate.pdf",
+            mime="application/pdf",
+        )
     st.caption(
-        "Cette version exporte en Word (.docx). L'export PDF sera ajouté dans "
-        "une prochaine étape après vérification des dépendances."
+        "La table des matières automatique est intégrée dans le fichier Word. "
+        "Dans Word, faites clic droit dessus puis « Mettre à jour les champs ». "
+        "Le PDF reprend le texte, les titres et les tableaux avec une mise en page simple ; "
+        "les images et certains éléments complexes du Word d'origine peuvent ne pas être reproduits."
     )
 
 
