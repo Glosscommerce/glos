@@ -167,27 +167,33 @@ def search_bibliography(topic: str, max_results: int = 8):
                     "name": author, "url": url, "provider": provider,
                 })
 
+    # Requêtes courtes complémentaires : le titre d'un livre n'emploie pas toujours
+    # les mêmes mots que le sujet exact du mémoire.
+    queries = _topic_queries(topic)
     # OpenAlex : catalogue ouvert de publications et de chercheurs.
-    try:
-        response = requests.get(
-            "https://api.openalex.org/works",
-            params={"search": topic, "per-page": min(limit * 3, 30),
-                    "select": "id,doi,display_name,publication_year,type,authorships,primary_location,abstract_inverted_index"},
-            headers=headers, timeout=18,
-        )
-        response.raise_for_status()
-        for work in response.json().get("results", []):
-            title = work.get("display_name") or ""
-            authors = [(a.get("author") or {}).get("display_name")
-                       for a in work.get("authorships", [])[:6]]
-            location = work.get("primary_location") or {}
-            url = location.get("landing_page_url") or work.get("doi") or work.get("id")
-            kind = (work.get("type") or "").lower()
-            category = "Livres" if kind in {"book", "monograph"} else "Articles scientifiques"
-            add_reference(category, title, work.get("publication_year"), authors,
-                          url, "OpenAlex", work.get("doi"), work_type=kind)
-    except (requests.RequestException, ValueError, TypeError) as exc:
-        errors.append("OpenAlex : " + str(exc)[:180])
+    for search_term in queries[:3]:
+        try:
+            response = requests.get(
+                "https://api.openalex.org/works",
+                params={"search": search_term, "per-page": min(limit * 2, 20),
+                        "select": "id,doi,display_name,publication_year,type,authorships,primary_location,abstract_inverted_index"},
+                headers=headers, timeout=18,
+            )
+            response.raise_for_status()
+            for work in response.json().get("results", []):
+                title = work.get("display_name") or ""
+                authors = [(a.get("author") or {}).get("display_name")
+                           for a in work.get("authorships", [])[:6]]
+                location = work.get("primary_location") or {}
+                url = location.get("landing_page_url") or work.get("doi") or work.get("id")
+                kind = (work.get("type") or "").lower()
+                category = "Livres" if kind in {"book", "monograph"} else "Articles scientifiques"
+                abstract = _openalex_abstract(work.get("abstract_inverted_index"))
+                add_reference(category, title, work.get("publication_year"), authors,
+                              url, "OpenAlex", work.get("doi"), abstract=abstract,
+                              work_type=kind)
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            errors.append("OpenAlex : " + str(exc)[:180])
 
     # Crossref : DOI, auteurs et date de publication.
     try:
@@ -210,20 +216,20 @@ def search_bibliography(topic: str, max_results: int = 8):
     except (requests.RequestException, ValueError, TypeError, IndexError) as exc:
         errors.append("Crossref : " + str(exc)[:180])
 
-    # Google Books : source complémentaire facultative. Limiter le volume pour éviter les quotas 429.
-    try:
-        response = requests.get(
-            "https://www.googleapis.com/books/v1/volumes",
-            params={"q": topic, "maxResults": min(limit, 8),
-                    "orderBy": "relevance", "printType": "books"},
-            headers=headers, timeout=18,
-        )
-        if response.status_code == 429:
-            # Quota/rate limit Google : ne pas faire échouer toute la bibliographie.
-            response = None
-        else:
+    # Google Books : une recherche par sujet principal et une par variante ciblée.
+    # En cas de quota 429, on arrête immédiatement pour éviter des appels inutiles.
+    google_queries = queries[:2]
+    for search_term in google_queries:
+        try:
+            response = requests.get(
+                "https://www.googleapis.com/books/v1/volumes",
+                params={"q": search_term, "maxResults": min(limit, 8),
+                        "orderBy": "relevance", "printType": "books"},
+                headers=headers, timeout=18,
+            )
+            if response.status_code == 429:
+                break
             response.raise_for_status()
-        if response is not None:
             for volume in response.json().get("items", []):
                 info = volume.get("volumeInfo") or {}
                 access = volume.get("accessInfo") or {}
@@ -238,33 +244,36 @@ def search_bibliography(topic: str, max_results: int = 8):
                     info.get("authors", []), link, "Google Books",
                     abstract=info.get("description"), work_type="book",
                 )
-                # Conserver les informations utiles au lecteur intégré.
                 if len(output["Livres"]) > before_count:
                     output["Livres"][-1]["google_books_id"] = volume_id
                     output["Livres"][-1]["viewability"] = access.get("viewability", "NO_PAGES")
-    except (requests.RequestException, ValueError, TypeError) as exc:
-        # Une source facultative ne doit pas bloquer les autres catalogues.
-        errors.append("Google Books (facultatif) : " + str(exc)[:180])
+                    output["Livres"][-1]["preview_link"] = info.get("previewLink", "")
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            errors.append("Google Books (facultatif) : " + str(exc)[:180])
+            break
 
-    # Open Library : livres et notices de catalogue.
-    try:
-        response = requests.get(
-            "https://openlibrary.org/search.json",
-            params={"q": topic, "limit": min(limit * 3, 30),
-                    "fields": "title,author_name,first_publish_year,key"},
-            headers=headers, timeout=18,
-        )
-        response.raise_for_status()
-        for item in response.json().get("docs", []):
-            key = item.get("key") or ""
-            if not key.startswith("/works/"):
-                continue
-            add_reference("Livres", item.get("title"),
-                          item.get("first_publish_year"), item.get("author_name", []),
-                          "https://openlibrary.org" + key, "Open Library",
-                          work_type="book")
-    except (requests.RequestException, ValueError, TypeError) as exc:
-        errors.append("Open Library : " + str(exc)[:180])
+    # Open Library : interroger plusieurs formulations, puis dédoublonner les notices.
+    for search_term in queries[:3]:
+        try:
+            response = requests.get(
+                "https://openlibrary.org/search.json",
+                params={"q": search_term, "limit": min(limit * 2, 20),
+                        "fields": "title,author_name,first_publish_year,key,subject"},
+                headers=headers, timeout=18,
+            )
+            response.raise_for_status()
+            for item in response.json().get("docs", []):
+                key = item.get("key") or ""
+                if not key.startswith("/works/"):
+                    continue
+                subjects = ", ".join((item.get("subject") or [])[:12])
+                add_reference("Livres", item.get("title"),
+                              item.get("first_publish_year"), item.get("author_name", []),
+                              "https://openlibrary.org" + key, "Open Library",
+                              abstract=subjects, work_type="book")
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            errors.append("Open Library : " + str(exc)[:180])
+            break
 
     # Mémoires et thèses : utiliser directement OpenAlex plutôt que DDGS.
     # DDGS peut appeler un service de suggestions Wikipedia (wt.wikipedia.org),
