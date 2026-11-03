@@ -93,6 +93,7 @@ def correct_docx_with_languagetool(document, language_code: str):
     paragraphs = list(_document_paragraphs(document))
     changes = []
     skipped = []
+    suggestions = []
     detected_count = 0
 
     for chunk in _chunks(paragraphs):
@@ -121,12 +122,24 @@ def correct_docx_with_languagetool(document, language_code: str):
             offset = int(match.get("offset", 0))
             length = int(match.get("length", 0))
             replacements = match.get("replacements") or []
-            if length <= 0 or not replacements:
+            original_text = text[offset:offset + length]
+            replacement_values = [
+                item.get("value", "") for item in replacements
+                if item.get("value", "")
+            ]
+            suggestions.append({
+                "Texte détecté": original_text,
+                "Suggestion LanguageTool": " / ".join(replacement_values[:3]) or "Aucune suggestion proposée",
+                "Explication": match.get("message", "Suggestion linguistique"),
+            })
+            if length <= 0 or not replacement_values:
+                skipped.append({
+                    "Texte": original_text,
+                    "Raison": "LanguageTool a détecté un point à vérifier mais n'a proposé aucune correction automatique.",
+                })
                 continue
 
-            replacement = replacements[0].get("value", "")
-            if not replacement:
-                continue
+            replacement = replacement_values[0]
 
             owner = next(
                 (entry for entry in paragraph_starts
@@ -212,4 +225,4 @@ def correct_docx_with_languagetool(document, language_code: str):
                     "Explication": message,
                 })
 
-    return document, changes, skipped, detected_count
+    return document, changes, skipped, detected_count, suggestions
