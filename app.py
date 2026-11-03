@@ -1,97 +1,169 @@
-            doc.add_paragraph(citation)
-    return doc
+import io, os, re, tempfile, subprocess, shutil
+from pathlib import Path
+import streamlit as st
+from docx import Document
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+import requests
 
-def correct_docx_with_languagetool(document, language_code: str):
-    """Apply LanguageTool's first replacement to matching DOCX paragraphs."""
-    paragraphs = list(document.paragraphs)
+APP_NAME = "Mémoire Correcteur Pro"
+st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
+st.title("📘 CORRECTGLOSS")
+st.caption("Correction • reformulation académique • mise en page • contrôle des citations")
 
-    def collect_table_paragraphs(table):
-        for row in table.rows:
-            for cell in row.cells:
-                paragraphs.extend(cell.paragraphs)
-                for nested_table in cell.tables:
-                    collect_table_paragraphs(nested_table)
+def log_app_event(event_type):
+    url = os.getenv("SUPABASE_URL", "").rstrip("/")
+    anon = os.getenv("SUPABASE_ANON_KEY", "")
+    if not url or not anon:
+        return
+    try:
+        requests.post(f"{url}/rest/v1/app_events",
+            headers={"apikey": anon, "Authorization": f"Bearer {anon}",
+                     "Content-Type": "application/json", "Prefer": "return=minimal"},
+            json={"event_name": event_type, "app_version": "0.4"}, timeout=5).raise_for_status()
+    except Exception:
+        pass
 
-    for table in document.tables:
-        collect_table_paragraphs(table)
+if "cg_session_logged" not in st.session_state:
+    log_app_event("app_open")
+    st.session_state["cg_session_logged"] = True
 
-    paragraphs = [paragraph for paragraph in paragraphs if paragraph.text]
-    contextual_changes = []
-    if language_code == "fr":
-        target_input = "l'enfant libre e chaque jour du semait nes du 12 février"
-        target_output = "L’enfant est libre tous les jours de la semaine du 12 février."
-        for paragraph in paragraphs:
-            normalized = paragraph.text.replace("’", "'").casefold()
-            normalized = re.sub(r"\s+", " ", normalized).strip()
-            if normalized == target_input:
-                original_phrase = paragraph.text
-                paragraph.text = target_output
-                contextual_changes.append({
-                    "Texte initial": original_phrase,
-                    "Texte corrigé": target_output,
-                    "Explication": "Correction contextuelle : formulation rétablie selon le sens confirmé par l'utilisateur.",
-                })
+def add_word_toc(document):
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    p = document.add_paragraph()
+    run = p.add_run()
+    begin = OxmlElement("w:fldChar")
+    begin.set(qn("w:fldCharType"), "begin")
+    instr = OxmlElement("w:instrText")
+    instr.set(qn("xml:space"), "preserve")
+    instr.text = ' TOC \\\\o "1-3" \\\\h \\\\z \\\\u '
+    separate = OxmlElement("w:fldChar")
+    separate.set(qn("w:fldCharType"), "separate")
+    text_run = OxmlElement("w:r")
+    text_node = OxmlElement("w:t")
+    text_node.text = "Ouvrez dans Word puis mettez à jour la table."
+    text_run.append(text_node)
+    end = OxmlElement("w:fldChar")
+    end.set(qn("w:fldCharType"), "end")
+    run._r.append(begin); run._r.append(instr); run._r.append(separate)
+    p._p.append(text_run); run._r.append(end)
+    body = document._element.body
+    body.remove(p._p)
+    body.insert(0, p._p)
+    return document
 
-    original_parts = [paragraph.text for paragraph in paragraphs]
-    full_text = "\n".join(original_parts)
-    if not full_text.strip():
-        return document, []
+with st.sidebar:
+    st.header("Paramètres")
+    mode = st.radio("Mode de correction", ["Hors ligne", "En ligne (LanguageTool)"])
+    language = st.selectbox("Langue", ["Français", "Anglais", "Malagasy"])
+    font = st.selectbox("Police", ["Times New Roman", "Arial", "Calibri"])
+    font_size = st.number_input("Taille (pt)", 10, 14, 12)
+    line_spacing = st.selectbox("Interligne", ["1.0", "1.15", "1.5", "2.0"], index=2)
+    margin_cm = st.number_input("Marges (cm)", 1.5, 4.0, 2.5, 0.25)
+    justify = st.checkbox("Justifier le texte", True)
 
-    response = requests.post(
-        "https://api.languagetool.org/v2/check",
-        data={"text": full_text[:20000], "language": language_code},
-        timeout=35,
-    )
-    response.raise_for_status()
-    matches = response.json().get("matches", [])
+uploaded = st.file_uploader("Importer un mémoire Word (.docx)", type=["docx"])
+if not uploaded:
+    st.info("Importez un document Word pour lancer les contrôles.")
+    st.stop()
 
-    starts, cursor = [], 0
-    for part in original_parts:
-        starts.append(cursor)
-        cursor += len(part) + 1
+try:
+    original_bytes = uploaded.getvalue()
+    doc = Document(io.BytesIO(original_bytes))
+except Exception as e:
+    st.error(f"Impossible d'ouvrir le document : {e}")
+    st.stop()
 
-    edits_by_paragraph = {}
-    for match in matches:
-        offset = int(match.get("offset", 0))
-        length = int(match.get("length", 0))
-        replacements = match.get("replacements") or []
-        if not replacements or length <= 0:
-            continue
-        replacement = replacements[0].get("value", "")
-        if not replacement:
-            continue
-        for index, start in enumerate(starts):
-            end = start + len(original_parts[index])
-            if start <= offset and offset + length <= end:
-                local_start = offset - start
-                edits_by_paragraph.setdefault(index, []).append(
-                    (local_start, length, replacement,
-                     full_text[offset:offset + length], match.get("message", "Correction linguistique"))
-                )
-                break
+paragraphs = [p.text for p in doc.paragraphs]
+text = "\n\n".join(p for p in paragraphs if p.strip())
+st.success(f"Document chargé : {len(paragraphs)} paragraphes • {len(doc.tables)} tableaux")
+st.text_area("Aperçu", "\n\n".join([p for p in paragraphs if p.strip()][:8]), height=220)
 
-    changes = list(contextual_changes)
-    for index, edits in edits_by_paragraph.items():
-        corrected = original_parts[index]
-        for local_start, length, replacement, old_text, message in sorted(
-            edits, key=lambda item: item[0], reverse=True
-        ):
-            corrected = corrected[:local_start] + replacement + corrected[local_start + length:]
-            changes.append({
-                "Texte initial": old_text,
-                "Texte corrigé": replacement,
-                "Explication": message,
-            })
-        paragraphs[index].text = corrected
+def offline_suggestions(content):
+    rules = [
+        (r"\bmalgré que\b", "bien que / malgré le fait que", "Formulation à vérifier."),
+        (r"\bau jour d'aujourd'hui\b", "aujourd'hui / à ce jour", "Redondance."),
+        (r"\btrès important\b", "essentiel / majeur / déterminant", "Préciser le sens."),
+        (r"\bon peut voir que\b", "les résultats montrent que", "Style académique."),
+        (r"\bje pense que\b", "les données suggèrent que", "Éviter une opinion non justifiée."),
+    ]
+    found = []
+    for pattern, suggestion, note in rules:
+        for m in re.finditer(pattern, content, re.I):
+            found.append({"motif": m.group(), "suggestion": suggestion, "explication": note})
+    return found
 
-    return document, changes
+if st.button("Analyser le mémoire", type="primary"):
+    results = offline_suggestions(text)
+    if mode == "En ligne (LanguageTool)" and language != "Malagasy":
+        code = "fr" if language == "Français" else "en-US"
+        try:
+            resp = requests.post("https://api.languagetool.org/v2/check",
+                                 data={"text": text[:20000], "language": code}, timeout=25)
+            resp.raise_for_status()
+            for item in resp.json().get("matches", []):
+                start, length = item.get("offset", 0), item.get("length", 0)
+                replacements = [x.get("value", "") for x in item.get("replacements", [])[:3]]
+                results.append({"motif": text[start:start+length],
+                    "suggestion": " / ".join(replacements) or "À vérifier",
+                    "explication": item.get("message", "LanguageTool")})
+        except Exception as e:
+            st.warning(f"LanguageTool indisponible : {e}")
+    elif language == "Malagasy" and mode != "Hors ligne":
+        st.warning("LanguageTool n'est pas activé pour le malagasy dans cette version.")
+    st.session_state["cg_results"] = results
+    log_app_event("document_analyzed")
 
+if "cg_results" in st.session_state:
+    st.subheader("Suggestions")
+    st.write(f"{len(st.session_state['cg_results'])} suggestion(s)")
+    if st.session_state["cg_results"]:
+        st.dataframe(st.session_state["cg_results"], use_container_width=True, hide_index=True)
+    else:
+        st.info("Aucune suggestion automatique trouvée. Cela ne garantit pas l'absence d'erreurs.")
 
-def offline_rewrite(text: str) -> str:
-    """Apply conservative, transparent local cleanups without an AI service."""
-    cleaned = re.sub(r"[ \t]+", " ", text.strip())
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    for pattern, replacement in [
-        (r"\bau jour d'aujourd'hui\b", "aujourd'hui"),
-        (r"\bmalgré que\b", "bien que"),
-        (r"\bon peut voir que\b", "les résultats montrent que"),
+st.subheader("Reformulation académique (facultative)")
+rewrite_text = st.text_area("Texte à reformuler")
+if st.button("Reformuler avec l'IA") and rewrite_text.strip():
+    key = os.getenv("OPENAI_API_KEY", "")
+    if not key:
+        st.error("OPENAI_API_KEY n'est pas configurée dans les secrets.")
+    else:
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=key)
+            prompt = "Reformule en français académique sans inventer de faits ou de sources. Conserve le sens:\n\n" + rewrite_text
+            result = client.responses.create(model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"), input=prompt)
+            st.text_area("Proposition à vérifier", result.output_text, height=220)
+            log_app_event("ai_rewrite")
+        except Exception as e:
+            st.error(f"Erreur IA : {e}")
+
+st.subheader("Export et mise en page")
+if st.button("Préparer le DOCX avec table des matières", type="primary"):
+    formatted = Document(io.BytesIO(original_bytes))
+    for section in formatted.sections:
+        section.top_margin = section.bottom_margin = Inches(margin_cm / 2.54)
+        section.left_margin = section.right_margin = Inches(margin_cm / 2.54)
+    for para in formatted.paragraphs:
+        if justify and not (para.style and para.style.name.lower().startswith("heading")):
+            para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        para.paragraph_format.line_spacing = float(line_spacing)
+        para.paragraph_format.space_after = Pt(6)
+        for run in para.runs:
+            run.font.name = font
+            run.font.size = Pt(int(font_size))
+    formatted = add_word_toc(formatted)
+    output = io.BytesIO()
+    formatted.save(output)
+    st.session_state["cg_docx"] = output.getvalue()
+    log_app_event("docx_export_prepared")
+    st.success("DOCX préparé. Dans Word, clic droit sur la table des matières > Mettre à jour les champs > Toute la table.")
+
+if "cg_docx" in st.session_state:
+    st.download_button("Télécharger le DOCX", st.session_state["cg_docx"],
+        file_name="correctgloss_memoire.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+st.caption("Les suggestions sont indicatives. Conservez toujours une copie originale du mémoire.")
