@@ -1,8 +1,8 @@
 """Conservative DOCX correction using LanguageTool.
 
-Edits are applied only when a LanguageTool match fits entirely inside one
-Word run. This keeps the run's character formatting instead of flattening
-the whole paragraph. Matches spanning multiple runs are reported as skipped.
+Corrections preserve Word run formatting where possible, including matches
+that span multiple runs. The function also reports the number of matches
+detected, applied changes, and skipped suggestions.
 """
 from __future__ import annotations
 
@@ -93,6 +93,7 @@ def correct_docx_with_languagetool(document, language_code: str):
     paragraphs = list(_document_paragraphs(document))
     changes = []
     skipped = []
+    detected_count = 0
 
     for chunk in _chunks(paragraphs):
         pieces = [item[2] for item in chunk]
@@ -116,6 +117,7 @@ def correct_docx_with_languagetool(document, language_code: str):
 
         edits_by_run = {}
         for match in matches:
+            detected_count += 1
             offset = int(match.get("offset", 0))
             length = int(match.get("length", 0))
             replacements = match.get("replacements") or []
@@ -210,4 +212,4 @@ def correct_docx_with_languagetool(document, language_code: str):
                     "Explication": message,
                 })
 
-    return document, changes, skipped
+    return document, changes, skipped, detected_count
