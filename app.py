@@ -76,7 +76,7 @@ def correct_docx_with_languagetool(document, language_code: str):
         target_output = "L’enfant est libre tous les jours de la semaine du 12 février."
         for index, paragraph in enumerate(paragraphs):
             normalized = paragraph.text.replace("’", "'").casefold()
-            normalized = re.sub(r"\\s+", " ", normalized).strip()
+            normalized = re.sub(r"\s+", " ", normalized).strip()
             if normalized == target_input:
                 paragraph.text = target_output
                 changes.append({
