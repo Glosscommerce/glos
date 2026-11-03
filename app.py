@@ -196,6 +196,7 @@ def show_research_page():
                 for detail in diagnostics:
                     st.caption(detail)
 
+    from urllib.parse import quote_plus
     for category in ["Auteurs et chercheurs", "Livres", "Articles scientifiques", "Documents, mémoires et thèses"]:
         entries = bibliography.get(category, [])
         st.markdown(f"**{category} ({len(entries)})**")
@@ -203,14 +204,30 @@ def show_research_page():
             st.caption("Aucun résultat pertinent trouvé. Essayez un thème plus précis ou une variante en anglais.")
         for item in entries:
             title = item.get("title") or item.get("name") or "Référence sans titre"
-            url = item.get("url")
-            st.markdown(f"- **[{title}]({url})**" if url else f"- **{title}**")
-            if item.get("authors"):
-                st.caption("Auteur(s) : " + ", ".join(item["authors"]))
+            authors = item.get("authors") or []
+            if category == "Auteurs et chercheurs":
+                # Un auteur OpenAlex ne doit pas pointer vers la page d'un article.
+                author_name = item.get("name") or title
+                author_url = "https://scholar.google.com/scholar?q=" + quote_plus(author_name)
+                st.markdown(f"- **[{author_name}]({author_url})**")
+                st.caption("Ouvrir les publications de cet auteur dans Google Scholar.")
+            else:
+                url = (item.get("url") or "").strip()
+                if url.startswith(("https://", "http://")):
+                    st.markdown(f"- **[{title}]({url})**")
+                    if category == "Livres":
+                        book_search = "https://books.google.com/books?vid=ISBN&q=" + quote_plus(title)
+                        st.markdown(f"  [Chercher un aperçu ou une version consultable sur Google Books]({book_search})")
+                else:
+                    st.markdown(f"- **{title}**")
+                    st.caption("Lien direct indisponible pour cette référence.")
+            if authors:
+                st.caption("Auteur(s) : " + ", ".join(authors))
             if item.get("year"):
                 st.caption(f"Année : {item['year']}")
             if item.get("doi"):
-                st.caption("DOI : " + str(item["doi"]).replace("https://doi.org/", ""))
+                doi_value = str(item["doi"]).replace("https://doi.org/", "").strip()
+                st.markdown(f"DOI : [ouvrir la publication](https://doi.org/{doi_value})")
             if item.get("relevance") is not None:
                 st.caption(f"Pertinence estimée : {round(float(item['relevance']) * 100)} %")
             if item.get("snippet"):
