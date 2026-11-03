@@ -90,7 +90,7 @@ if st.button("Corriger automatiquement le document", type="primary"):
         try:
             correction_doc = Document(io.BytesIO(original_bytes))
             language_code = "fr" if language == "Français" else "en-US"
-            correction_doc, applied_changes, skipped_matches = correct_docx_with_languagetool(
+            correction_doc, applied_changes, skipped_matches, detected_count = correct_docx_with_languagetool(
                 correction_doc, language_code
             )
             corrected_output = io.BytesIO()
@@ -98,7 +98,8 @@ if st.button("Corriger automatiquement le document", type="primary"):
             st.session_state["cg_corrected_docx"] = corrected_output.getvalue()
             st.session_state["cg_correction_changes"] = applied_changes
             st.session_state["cg_correction_skipped"] = skipped_matches
-            st.success(f"Correction terminée : {len(applied_changes)} modification(s) appliquée(s).")
+            st.session_state["cg_correction_detected"] = detected_count
+            st.success("Correction automatique terminée.")
         except requests.RequestException as e:
             st.error(f"LanguageTool est momentanément indisponible : {e}")
         except Exception as e:
@@ -111,6 +112,14 @@ if "cg_corrected_docx" in st.session_state:
         file_name="correctgloss_corrige.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+    detected_count = st.session_state.get("cg_correction_detected", 0)
+    applied_count = len(st.session_state.get("cg_correction_changes", []))
+    not_applied_count = max(0, detected_count - applied_count)
+    metric_cols = st.columns(3)
+    metric_cols[0].metric("Erreurs détectées", detected_count)
+    metric_cols[1].metric("Corrections appliquées", applied_count)
+    metric_cols[2].metric("Non appliquées", not_applied_count)
+
     corrected_preview_doc = Document(io.BytesIO(st.session_state["cg_corrected_docx"]))
     corrected_preview_text = "\n\n".join(
         p.text for p in corrected_preview_doc.paragraphs if p.text.strip()
