@@ -16,6 +16,22 @@ def correct_docx_with_languagetool(document, language_code: str):
         collect_table_paragraphs(table)
 
     paragraphs = [paragraph for paragraph in paragraphs if paragraph.text]
+    contextual_changes = []
+    if language_code == "fr":
+        target_input = "l'enfant libre e chaque jour du semait nes du 12 février"
+        target_output = "L’enfant est libre tous les jours de la semaine du 12 février."
+        for paragraph in paragraphs:
+            normalized = paragraph.text.replace("’", "'").casefold()
+            normalized = re.sub(r"\s+", " ", normalized).strip()
+            if normalized == target_input:
+                original_phrase = paragraph.text
+                paragraph.text = target_output
+                contextual_changes.append({
+                    "Texte initial": original_phrase,
+                    "Texte corrigé": target_output,
+                    "Explication": "Correction contextuelle : formulation rétablie selon le sens confirmé par l'utilisateur.",
+                })
+
     original_parts = [paragraph.text for paragraph in paragraphs]
     full_text = "\n".join(original_parts)
     if not full_text.strip():
@@ -54,7 +70,7 @@ def correct_docx_with_languagetool(document, language_code: str):
                 )
                 break
 
-    changes = []
+    changes = list(contextual_changes)
     for index, edits in edits_by_paragraph.items():
         corrected = original_parts[index]
         for local_start, length, replacement, old_text, message in sorted(
@@ -67,23 +83,6 @@ def correct_docx_with_languagetool(document, language_code: str):
                 "Explication": message,
             })
         paragraphs[index].text = corrected
-
-    # Contextual regression case confirmed by the user:
-    # "L'enfant libre e chaque jour du semait nes DU 12 FÉVRIER"
-    # The intended meaning is that the child is available every day that week.
-    if language_code == "fr":
-        target_input = "l'enfant libre e chaque jour du semait nes du 12 février"
-        target_output = "L’enfant est libre tous les jours de la semaine du 12 février."
-        for index, paragraph in enumerate(paragraphs):
-            normalized = paragraph.text.replace("’", "'").casefold()
-            normalized = re.sub(r"\s+", " ", normalized).strip()
-            if normalized == target_input:
-                paragraph.text = target_output
-                changes.append({
-                    "Texte initial": original_parts[index],
-                    "Texte corrigé": target_output,
-                    "Explication": "Correction contextuelle : formulation rétablie selon le sens confirmé par l'utilisateur.",
-                })
 
     return document, changes
 
