@@ -53,7 +53,7 @@ def _relevance(topic, title="", snippet="", url=""):
     overlap = len(terms & (title_terms | body_terms)) / len(terms)
     domain = urlparse(url).netloc.lower()
     academic_bonus = 0.06 if any(d in domain for d in ACADEMIC_DOMAINS) else 0
-    # Madagascar / export / qualité / girofle peuvent apparaître séparément.
+    # Bonus de contexte, sans considérer un simple mot générique comme preuve suffisante.
     context_bonus = 0.04 if any(x in (title_terms | body_terms)
                                 for x in {"madagascar", "malgache", "girofle", "clove"}) else 0
     return min(1.0, title_score * 0.55 + body_score * 0.20
@@ -138,8 +138,19 @@ def search_bibliography(topic: str, max_results: int = 8):
         if not title or not url:
             return
         score = _relevance(topic, title, abstract or "", url)
-        # Les catalogues renvoient parfois des résultats éloignés : on les écarte.
-        if score < 0.12:
+        title_body = _terms(title + " " + (abstract or ""))
+        topic_terms = _terms(topic)
+        # Pour un sujet centré sur le girofle, éviter les mémoires sur des filières
+        # sans lien identifiable avec le girofle/clove.
+        clove_topic = bool(topic_terms & {"girofle", "clove", "cloves"})
+        clove_match = bool(title_body & {"girofle", "clove", "cloves", "syzygium", "aromaticum"})
+        if clove_topic and not clove_match:
+            related_trade = bool(title_body & {"export", "exportation", "competitivite", "quality", "qualite"})
+            madagascar_match = bool(title_body & {"madagascar", "malgache"})
+            if not (related_trade and madagascar_match and score >= 0.32):
+                return
+        # Seuil relevé pour limiter les résultats faiblement liés au sujet.
+        if score < 0.20:
             return
         key = (category, _normalise(title))
         if key in seen:
@@ -209,10 +220,21 @@ def search_bibliography(topic: str, max_results: int = 8):
             date_parts = (item.get("published", {}).get("date-parts") or [[None]])[0]
             doi = item.get("DOI")
             url = ("https://doi.org/" + doi) if doi else item.get("URL")
-            add_reference("Articles scientifiques",
-                          (item.get("title") or [""])[0],
+            crossref_type = (item.get("type") or "").lower()
+            crossref_title = (item.get("title") or [""])[0]
+            if crossref_type in {"dissertation", "thesis"}:
+                category = "Documents, mémoires et thèses"
+            elif crossref_type in {"journal-article", "proceedings-article", "posted-content"}:
+                category = "Articles scientifiques"
+            elif crossref_type in {"book", "monograph", "edited-book", "book-chapter"}:
+                category = "Livres"
+            else:
+                # Ne pas présenter les composants, rapports et notices diverses
+                # comme des articles scientifiques évalués par les pairs.
+                continue
+            add_reference(category, crossref_title,
                           date_parts[0] if date_parts else None, authors, url,
-                          "Crossref", doi, work_type=item.get("type"))
+                          "Crossref", doi, work_type=crossref_type)
     except (requests.RequestException, ValueError, TypeError, IndexError) as exc:
         errors.append("Crossref : " + str(exc)[:180])
 
