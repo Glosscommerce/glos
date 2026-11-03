@@ -199,7 +199,8 @@ def show_research_page():
     from urllib.parse import quote_plus
 
     @st.dialog("📖 Lecture du livre dans CORRECTGLOSS", width="large")
-    def open_book_inside_app(book_title, book_author="", google_books_id=None):
+    def open_book_inside_app(book_title, book_author="", google_books_id=None,
+                             viewability="NO_PAGES", preview_link=""):
         st.write(f"**{book_title}**")
         if book_author:
             st.caption("Auteur(s) : " + book_author)
@@ -210,8 +211,8 @@ def show_research_page():
                 # évite un deuxième appel API et limite les erreurs 429.
                 selected = {
                     "id": google_books_id,
-                    "accessInfo": {},
-                    "volumeInfo": {},
+                    "accessInfo": {"viewability": viewability},
+                    "volumeInfo": {"previewLink": preview_link},
                 }
             else:
                 with st.spinner("Recherche d'un aperçu consultable..."):
@@ -275,7 +276,8 @@ def show_research_page():
                     "📖 Lire dans CORRECTGLOSS",
                     key=f"cg_read_book_{index}_{quote_plus(title)[:40]}",
                     on_click=open_book_inside_app,
-                    args=(title, ", ".join(authors), item.get("google_books_id")),
+                    args=(title, ", ".join(authors), item.get("google_books_id"),
+                          item.get("viewability", "NO_PAGES"), item.get("preview_link", "")),
                 )
             else:
                 url = (item.get("url") or "").strip()
