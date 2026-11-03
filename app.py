@@ -197,27 +197,81 @@ def show_research_page():
                     st.caption(detail)
 
     from urllib.parse import quote_plus
+
+    @st.dialog("📖 Lecture du livre dans CORRECTGLOSS", width="large")
+    def open_book_inside_app(book_title, book_author=""):
+        st.write(f"**{book_title}**")
+        if book_author:
+            st.caption("Auteur(s) : " + book_author)
+        try:
+            with st.spinner("Recherche d'un aperçu consultable..."):
+                response = requests.get(
+                    "https://www.googleapis.com/books/v1/volumes",
+                    params={"q": 'intitle:"' + book_title + '"', "maxResults": 5},
+                    timeout=15,
+                )
+                response.raise_for_status()
+                volumes = response.json().get("items", [])
+            selected = None
+            for volume in volumes:
+                info = volume.get("volumeInfo", {})
+                candidate_title = info.get("title", "")
+                if candidate_title and (
+                    candidate_title.lower() == book_title.lower()
+                    or book_title.lower() in candidate_title.lower()
+                    or candidate_title.lower() in book_title.lower()
+                ):
+                    selected = volume
+                    break
+            if selected is None and volumes:
+                selected = volumes[0]
+            if not selected:
+                st.info("Aucun aperçu numérique disponible pour ce titre. Le catalogue a trouvé la référence, mais pas de fichier lisible intégré.")
+                return
+            volume_id = selected.get("id")
+            access = selected.get("accessInfo", {})
+            viewability = access.get("viewability", "NO_PAGES")
+            if volume_id and viewability in {"ALL_PAGES", "PARTIAL", "TEXT_ONLY"}:
+                st.success("Aperçu disponible — lecture intégrée ci-dessous.")
+                st.components.v1.iframe(
+                    f"https://books.google.com/books?id={quote_plus(volume_id)}&printsec=frontcover&output=embed",
+                    height=650,
+                    scrolling=True,
+                )
+                st.caption("L'étendue des pages visibles dépend des droits et des réglages de l'éditeur.")
+            else:
+                st.info("Ce livre est bien référencé, mais Google Books ne fournit pas de pages consultables intégrables. CORRECTGLOSS ne peut pas afficher le livre complet sans accès légal au texte.")
+                preview = (selected.get("volumeInfo") or {}).get("previewLink")
+                if preview:
+                    st.markdown(f"[Consulter la fiche/aperçu disponible]({preview})")
+        except Exception as exc:
+            st.warning(f"Le lecteur n'a pas pu charger l'aperçu : {exc}")
+
     for category in ["Auteurs et chercheurs", "Livres", "Articles scientifiques", "Documents, mémoires et thèses"]:
         entries = bibliography.get(category, [])
         st.markdown(f"**{category} ({len(entries)})**")
         if not entries:
             st.caption("Aucun résultat pertinent trouvé. Essayez un thème plus précis ou une variante en anglais.")
-        for item in entries:
+        for index, item in enumerate(entries):
             title = item.get("title") or item.get("name") or "Référence sans titre"
             authors = item.get("authors") or []
             if category == "Auteurs et chercheurs":
-                # Un auteur OpenAlex ne doit pas pointer vers la page d'un article.
                 author_name = item.get("name") or title
                 author_url = "https://scholar.google.com/scholar?q=" + quote_plus(author_name)
                 st.markdown(f"- **[{author_name}]({author_url})**")
                 st.caption("Ouvrir les publications de cet auteur dans Google Scholar.")
+            elif category == "Livres":
+                st.markdown(f"- **{title}**")
+                st.button(
+                    "📖 Lire dans CORRECTGLOSS",
+                    key=f"cg_read_book_{index}_{quote_plus(title)[:40]}",
+                    on_click=open_book_inside_app,
+                    args=(title, ", ".join(authors)),
+                )
             else:
                 url = (item.get("url") or "").strip()
                 if url.startswith(("https://", "http://")):
                     st.markdown(f"- **[{title}]({url})**")
-                    if category == "Livres":
-                        book_search = "https://books.google.com/books?vid=ISBN&q=" + quote_plus(title)
-                        st.markdown(f"  [Chercher un aperçu ou une version consultable sur Google Books]({book_search})")
                 else:
                     st.markdown(f"- **{title}**")
                     st.caption("Lien direct indisponible pour cette référence.")
