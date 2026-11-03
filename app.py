@@ -199,32 +199,41 @@ def show_research_page():
     from urllib.parse import quote_plus
 
     @st.dialog("📖 Lecture du livre dans CORRECTGLOSS", width="large")
-    def open_book_inside_app(book_title, book_author=""):
+    def open_book_inside_app(book_title, book_author="", google_books_id=None):
         st.write(f"**{book_title}**")
         if book_author:
             st.caption("Auteur(s) : " + book_author)
         try:
-            with st.spinner("Recherche d'un aperçu consultable..."):
-                response = requests.get(
-                    "https://www.googleapis.com/books/v1/volumes",
-                    params={"q": 'intitle:"' + book_title + '"', "maxResults": 5},
-                    timeout=15,
-                )
-                response.raise_for_status()
-                volumes = response.json().get("items", [])
             selected = None
-            for volume in volumes:
-                info = volume.get("volumeInfo", {})
-                candidate_title = info.get("title", "")
-                if candidate_title and (
-                    candidate_title.lower() == book_title.lower()
-                    or book_title.lower() in candidate_title.lower()
-                    or candidate_title.lower() in book_title.lower()
-                ):
-                    selected = volume
-                    break
-            if selected is None and volumes:
-                selected = volumes[0]
+            if google_books_id:
+                # Réutiliser l'identifiant déjà obtenu pendant la recherche :
+                # évite un deuxième appel API et limite les erreurs 429.
+                selected = {
+                    "id": google_books_id,
+                    "accessInfo": {},
+                    "volumeInfo": {},
+                }
+            else:
+                with st.spinner("Recherche d'un aperçu consultable..."):
+                    response = requests.get(
+                        "https://www.googleapis.com/books/v1/volumes",
+                        params={"q": 'intitle:"' + book_title + '"', "maxResults": 3},
+                        timeout=15,
+                    )
+                    response.raise_for_status()
+                    volumes = response.json().get("items", [])
+                for volume in volumes:
+                    info = volume.get("volumeInfo", {})
+                    candidate_title = info.get("title", "")
+                    if candidate_title and (
+                        candidate_title.lower() == book_title.lower()
+                        or book_title.lower() in candidate_title.lower()
+                        or candidate_title.lower() in book_title.lower()
+                    ):
+                        selected = volume
+                        break
+                if selected is None and volumes:
+                    selected = volumes[0]
             if not selected:
                 st.info("Aucun aperçu numérique disponible pour ce titre. Le catalogue a trouvé la référence, mais pas de fichier lisible intégré.")
                 return
@@ -266,7 +275,7 @@ def show_research_page():
                     "📖 Lire dans CORRECTGLOSS",
                     key=f"cg_read_book_{index}_{quote_plus(title)[:40]}",
                     on_click=open_book_inside_app,
-                    args=(title, ", ".join(authors)),
+                    args=(title, ", ".join(authors), item.get("google_books_id")),
                 )
             else:
                 url = (item.get("url") or "").strip()
