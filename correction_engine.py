@@ -74,14 +74,13 @@ def _chunks(paragraphs):
         value = paragraph.text or ""
         if not value.strip():
             continue
-        # An unusually long paragraph is sent alone in bounded pieces only
-        # at safe character boundaries; matches crossing pieces are omitted.
         if current and current_size + len(value) + 1 > MAX_CHUNK_CHARS:
             yield current
             current, current_size = [], 0
         if len(value) > MAX_CHUNK_CHARS:
-            for start in range(0, len(value), MAX_CHUNK_CHARS):
-                yield [(paragraph, start, value[start:start + MAX_CHUNK_CHARS])]
+            # Keep a long paragraph intact so offsets remain stable when edits
+            # are applied. It is sent as one request rather than split.
+            yield [(paragraph, 0, value)]
         else:
             current.append((paragraph, 0, value))
             current_size += len(value) + 1
