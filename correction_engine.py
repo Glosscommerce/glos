@@ -7,11 +7,56 @@ detected, applied changes, and skipped suggestions.
 from __future__ import annotations
 
 import requests
+import re
 
 
 LANGUAGETOOL_URL = "https://api.languagetool.org/v2/check"
 MAX_CHUNK_CHARS = 12_000
 
+
+
+def _choose_safe_replacement(full_text: str, offset: int, original: str, replacements: list[str]):
+    """Choose a conservative replacement without changing clear number/gender cues.
+
+    Returns (replacement, reason). A None replacement means keep the issue as
+    a suggestion for human review rather than applying a risky alternative.
+    """
+    if not replacements:
+        return None, "Aucune suggestion disponible."
+
+    before = full_text[max(0, offset - 100):offset]
+    after = full_text[offset + len(original):offset + len(original) + 80]
+    stripped = original.strip()
+
+    # Preserve an explicit plural determiner. LanguageTool may rank a
+    # singular rewrite first even though it changes the sentence's meaning.
+    if re.match(r"(?i)^les\\s+", stripped):
+        plural = [value for value in replacements if re.match(r"(?i)^les\\s+", value.strip())]
+        if plural:
+            return plural[0], "Nombre pluriel conservé."
+
+    # For "nous sommes + infinitive", choose a plural past participle.
+    # Masculine plural is the conventional default when the group's gender
+    # is unknown; an explicitly feminine subject selects feminine plural.
+    if re.search(r"(?i)\\bnous\\s+sommes\\s+$", before) and re.fullmatch(r"(?i)aller", stripped):
+        feminine = bool(re.search(r"(?i)\\b(elles|nous,?\\s+les\\s+femmes)\\s+sommes\\s+$", before))
+        preferred = "allées" if feminine else "allés"
+        for value in replacements:
+            if value.strip().lower() == preferred:
+                return value, "Accord au pluriel avec « nous sommes »."
+        return None, "Accord du participe passé à vérifier selon la composition du groupe."
+
+    # Do not turn a feminine singular adjective into masculine/feminine plural
+    # when a clear feminine singular subject is immediately available.
+    feminine_singular_subject = bool(
+        re.search(r"(?i)\\b(ma\\s+sœur|ma\\s+mere|elle|cette\\s+femme)\\b[^.!?]{0,60}$", before)
+    )
+    if feminine_singular_subject and stripped.lower().endswith(("e", "ée")):
+        if any(value.strip().lower() == stripped.lower() for value in replacements):
+            return stripped, "Accord féminin singulier conservé."
+        return None, "Les alternatives changent le genre ou le nombre; vérification manuelle nécessaire."
+
+    return replacements[0], "Première suggestion LanguageTool appliquée; relire le contexte."
 
 def _iter_table_paragraphs(table):
     for row in table.rows:
@@ -139,7 +184,15 @@ def correct_docx_with_languagetool(document, language_code: str):
                 })
                 continue
 
-            replacement = replacement_values[0]
+            replacement, selection_reason = _choose_safe_replacement(
+                text, offset, original_text, replacement_values
+            )
+            if replacement is None:
+                skipped.append({
+                    "Texte": original_text,
+                    "Raison": selection_reason,
+                })
+                continue
 
             owner = next(
                 (entry for entry in paragraph_starts
@@ -173,6 +226,7 @@ def correct_docx_with_languagetool(document, language_code: str):
             edits_by_run.setdefault(paragraph, []).append((
                 paragraph_start, paragraph_end, replacement, old_text,
                 match.get("message", "Correction linguistique"),
+                selection_reason,
             ))
 
         # Apply edits from right to left using the original paragraph offsets.
@@ -193,7 +247,7 @@ def correct_docx_with_languagetool(document, language_code: str):
                 accepted.append(edit)
                 last_start = start
 
-            for paragraph_start, paragraph_end, replacement, old_text, message in accepted:
+            for paragraph_start, paragraph_end, replacement, old_text, message, selection_reason in accepted:
                 spans = _run_spans(paragraph)
                 affected = [
                     (start, end, run)
@@ -223,6 +277,7 @@ def correct_docx_with_languagetool(document, language_code: str):
                     "Texte initial": old_text,
                     "Texte corrigé": replacement,
                     "Explication": message,
+                    "Méthode": selection_reason,
                 })
 
     return document, changes, skipped, detected_count, suggestions
