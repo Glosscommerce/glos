@@ -185,11 +185,19 @@ def show_research_page():
                 st.error(f"Recherche bibliographique indisponible : {exc}")
 
     bibliography = st.session_state.get("cg_bibliography", {})
+    if bibliography:
+        st.info(bibliography.get("_message", "Résultats issus de catalogues publics."))
+        diagnostics = bibliography.get("_diagnostics", [])
+        if diagnostics:
+            with st.expander("Détails des sources temporairement indisponibles"):
+                for detail in diagnostics:
+                    st.caption(detail)
+
     for category in ["Auteurs et chercheurs", "Livres", "Articles scientifiques", "Documents, mémoires et thèses"]:
         entries = bibliography.get(category, [])
         st.markdown(f"**{category} ({len(entries)})**")
         if not entries:
-            st.caption("Aucun résultat trouvé pour cette catégorie.")
+            st.caption("Aucun résultat pertinent trouvé. Essayez un thème plus précis ou une variante en anglais.")
         for item in entries:
             title = item.get("title") or item.get("name") or "Référence sans titre"
             url = item.get("url")
@@ -198,12 +206,16 @@ def show_research_page():
                 st.caption("Auteur(s) : " + ", ".join(item["authors"]))
             if item.get("year"):
                 st.caption(f"Année : {item['year']}")
+            if item.get("doi"):
+                st.caption("DOI : " + str(item["doi"]).replace("https://doi.org/", ""))
+            if item.get("relevance") is not None:
+                st.caption(f"Pertinence estimée : {round(float(item['relevance']) * 100)} %")
             if item.get("snippet"):
                 st.write(item["snippet"])
-            st.caption("Source : " + item.get("provider", "Catalogue en ligne"))
+            st.caption("Catalogue : " + item.get("provider", "Catalogue en ligne"))
 
     if bibliography:
-        st.warning("Vérifiez toujours l'existence du livre ou document, son édition, son auteur et son contenu avant de le citer dans votre mémoire.")
+        st.warning("Les scores de pertinence sont indicatifs. Vérifiez la notice originale, l'édition, les auteurs, l'année et le contenu avant toute citation académique.")
 
     sources = st.session_state.get("cg_research_results", [])
     if sources:
