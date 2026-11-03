@@ -5,6 +5,7 @@ from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import requests
+from correction_engine import correct_docx_with_languagetool
 
 APP_NAME = "Mémoire Correcteur Pro"
 st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
@@ -79,6 +80,45 @@ paragraphs = [p.text for p in doc.paragraphs]
 text = "\n\n".join(p for p in paragraphs if p.strip())
 st.success(f"Document chargé : {len(paragraphs)} paragraphes • {len(doc.tables)} tableaux")
 st.text_area("Aperçu", "\n\n".join([p for p in paragraphs if p.strip()][:8]), height=220)
+
+st.subheader("Correction automatique du document Word")
+st.caption("La correction utilise LanguageTool en ligne. Les segments Word dont la correction traverserait plusieurs mises en forme sont laissés intacts.")
+if st.button("Corriger automatiquement le document", type="primary"):
+    if language == "Malagasy":
+        st.warning("La correction automatique LanguageTool n'est pas disponible pour le malagasy dans cette version.")
+    else:
+        try:
+            correction_doc = Document(io.BytesIO(original_bytes))
+            language_code = "fr" if language == "Français" else "en-US"
+            correction_doc, applied_changes, skipped_matches = correct_docx_with_languagetool(
+                correction_doc, language_code
+            )
+            corrected_output = io.BytesIO()
+            correction_doc.save(corrected_output)
+            st.session_state["cg_corrected_docx"] = corrected_output.getvalue()
+            st.session_state["cg_correction_changes"] = applied_changes
+            st.session_state["cg_correction_skipped"] = skipped_matches
+            st.success(f"Correction terminée : {len(applied_changes)} modification(s) appliquée(s).")
+        except requests.RequestException as e:
+            st.error(f"LanguageTool est momentanément indisponible : {e}")
+        except Exception as e:
+            st.error(f"Erreur pendant la correction : {e}")
+
+if "cg_corrected_docx" in st.session_state:
+    st.download_button(
+        "Télécharger le document Word corrigé",
+        st.session_state["cg_corrected_docx"],
+        file_name="correctgloss_corrige.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    if st.session_state.get("cg_correction_changes"):
+        st.write("Modifications appliquées")
+        st.dataframe(st.session_state["cg_correction_changes"], use_container_width=True, hide_index=True)
+    else:
+        st.info("Aucune correction automatique proposée. Cela ne garantit pas l'absence d'erreurs.")
+    if st.session_state.get("cg_correction_skipped"):
+        st.warning(f"{len(st.session_state['cg_correction_skipped'])} suggestion(s) non appliquée(s) pour préserver le document.")
+        st.dataframe(st.session_state["cg_correction_skipped"], use_container_width=True, hide_index=True)
 
 def offline_suggestions(content):
     rules = [
