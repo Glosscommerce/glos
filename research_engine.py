@@ -122,7 +122,7 @@ def search_bibliography(topic: str, max_results: int = 8):
         output[category].append({
             "title": title[:300], "year": year, "authors": author_list,
             "url": url, "type": work_type or "publication",
-            "provider": provider, "relevance": round(score, 2),
+            "provider": provider, "relevance": round(score, 2), "doi": doi,
             "snippet": " | ".join(details),
         })
         for author in author_list:
