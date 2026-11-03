@@ -210,6 +210,35 @@ def search_bibliography(topic: str, max_results: int = 8):
     except (requests.RequestException, ValueError, TypeError, IndexError) as exc:
         errors.append("Crossref : " + str(exc)[:180])
 
+    # Google Books : catalogue complémentaire pour trouver des livres lisibles ou prévisualisables.
+    try:
+        response = requests.get(
+            "https://www.googleapis.com/books/v1/volumes",
+            params={"q": topic, "maxResults": min(limit * 3, 30),
+                    "orderBy": "relevance", "printType": "books"},
+            headers=headers, timeout=18,
+        )
+        response.raise_for_status()
+        for volume in response.json().get("items", []):
+            info = volume.get("volumeInfo") or {}
+            access = volume.get("accessInfo") or {}
+            volume_id = volume.get("id")
+            link = info.get("previewLink") or info.get("infoLink")
+            if not link and volume_id:
+                link = "https://books.google.com/books?id=" + volume_id
+            add_reference(
+                "Livres", info.get("title"),
+                (info.get("publishedDate") or "")[:4] or None,
+                info.get("authors", []), link, "Google Books",
+                abstract=info.get("description"), work_type="book",
+            )
+            # Conserver les informations utiles au lecteur intégré.
+            if output["Livres"] and output["Livres"][-1].get("provider") == "Google Books":
+                output["Livres"][-1]["google_books_id"] = volume_id
+                output["Livres"][-1]["viewability"] = access.get("viewability", "NO_PAGES")
+    except (requests.RequestException, ValueError, TypeError) as exc:
+        errors.append("Google Books : " + str(exc)[:180])
+
     # Open Library : livres et notices de catalogue.
     try:
         response = requests.get(
