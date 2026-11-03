@@ -121,8 +121,8 @@ def show_admin_dashboard():
             counts[name] = counts.get(name, 0) + 1
         cols = st.columns(4)
         for col, label, key in zip(cols,
-            ["Ouvertures", "Analyses", "Reformulations IA", "Exports DOCX"],
-            ["app_open", "document_analyzed", "ai_rewrite", "docx_export_prepared"]):
+            ["Ouvertures", "Recherches", "Analyses", "Exports Word/PDF"],
+            ["app_open", "web_research", "document_analyzed", "docx_export_prepared"]):
             col.metric(label, counts.get(key, 0))
         if events:
             import pandas as pd
@@ -132,8 +132,11 @@ def show_admin_dashboard():
             daily = daily.groupby(["jour", "event_name"]).size().unstack(fill_value=0)
             st.subheader("Activité quotidienne")
             st.line_chart(daily)
+            st.subheader("Répartition des fonctionnalités")
+            st.bar_chart(df["event_name"].value_counts())
             st.subheader("Événements récents")
             st.dataframe(df, use_container_width=True, hide_index=True)
+            st.caption("Les chiffres représentent des événements enregistrés, pas nécessairement des personnes uniques. Liste limitée aux 5 000 événements les plus récents.")
         else:
             st.info("Aucun événement enregistré pour le moment.")
     except Exception as e:
@@ -216,6 +219,49 @@ def show_research_page():
 
     if bibliography:
         st.warning("Les scores de pertinence sont indicatifs. Vérifiez la notice originale, l'édition, les auteurs, l'année et le contenu avant toute citation académique.")
+        if st.button("📥 Préparer la bibliographie en Word et PDF"):
+            try:
+                bibliography_doc = Document()
+                bibliography_doc.add_heading("Bibliographie – CORRECTGLOSS", 0)
+                bibliography_doc.add_paragraph("Sujet : " + query)
+                for category in ["Articles scientifiques", "Livres", "Documents, mémoires et thèses"]:
+                    entries = bibliography.get(category, [])
+                    if entries:
+                        bibliography_doc.add_heading(category, level=1)
+                        for item in entries:
+                            p = bibliography_doc.add_paragraph(style="List Number")
+                            p.add_run(item.get("title", "Référence sans titre")).bold = True
+                            details = []
+                            if item.get("authors"): details.append(", ".join(item["authors"]))
+                            if item.get("year"): details.append(str(item["year"]))
+                            if item.get("doi"): details.append("DOI : " + str(item["doi"]).replace("https://doi.org/", ""))
+                            if item.get("url"): details.append(item["url"])
+                            if details: bibliography_doc.add_paragraph(" — ".join(details))
+                buffer = io.BytesIO()
+                bibliography_doc.save(buffer)
+                st.session_state["cg_bibliography_docx"] = buffer.getvalue()
+                try:
+                    st.session_state["cg_bibliography_pdf"] = convert_docx_to_pdf(buffer.getvalue())
+                    st.session_state.pop("cg_bibliography_pdf_error", None)
+                except Exception as pdf_error:
+                    st.session_state.pop("cg_bibliography_pdf", None)
+                    st.session_state["cg_bibliography_pdf_error"] = str(pdf_error)
+                log_app_event("bibliography_export")
+                st.success("Bibliographie Word préparée.")
+            except Exception as export_error:
+                st.error(f"Erreur pendant la préparation : {export_error}")
+        if st.session_state.get("cg_bibliography_docx"):
+            c1, c2 = st.columns(2)
+            with c1:
+                st.download_button("Télécharger bibliographie Word", st.session_state["cg_bibliography_docx"],
+                    file_name="correctgloss_bibliographie.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            with c2:
+                if st.session_state.get("cg_bibliography_pdf"):
+                    st.download_button("Télécharger bibliographie PDF", st.session_state["cg_bibliography_pdf"],
+                        file_name="correctgloss_bibliographie.pdf", mime="application/pdf")
+            if st.session_state.get("cg_bibliography_pdf_error"):
+                st.caption("Conversion PDF indisponible : " + st.session_state["cg_bibliography_pdf_error"])
 
     sources = st.session_state.get("cg_research_results", [])
     if sources:
