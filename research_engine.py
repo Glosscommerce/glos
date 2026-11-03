@@ -39,16 +39,50 @@ def _terms(value):
 
 
 def _relevance(topic, title="", snippet="", url=""):
+    """Score thématique tolérant aux formulations différentes, sans survaloriser le domaine."""
     terms = _terms(topic)
     if not terms:
         return 0.0
     title_terms = _terms(title)
     body_terms = _terms(snippet)
+    # Le titre compte davantage que le résumé ; les mots-clés présents dans les deux
+    # renforcent le score. Cela évite qu'un résultat partageant un seul mot générique
+    # soit classé comme très pertinent.
     title_score = len(terms & title_terms) / len(terms)
     body_score = len(terms & body_terms) / len(terms)
+    overlap = len(terms & (title_terms | body_terms)) / len(terms)
     domain = urlparse(url).netloc.lower()
-    academic_bonus = 0.15 if any(d in domain for d in ACADEMIC_DOMAINS) else 0
-    return min(1.0, title_score * 0.70 + body_score * 0.30 + academic_bonus)
+    academic_bonus = 0.06 if any(d in domain for d in ACADEMIC_DOMAINS) else 0
+    # Madagascar / export / qualité / girofle peuvent apparaître séparément.
+    context_bonus = 0.04 if any(x in (title_terms | body_terms)
+                                for x in {"madagascar", "malgache", "girofle", "clove"}) else 0
+    return min(1.0, title_score * 0.55 + body_score * 0.20
+               + overlap * 0.25 + academic_bonus + context_bonus)
+
+
+def _openalex_abstract(inverted_index):
+    """Reconstruit le résumé OpenAlex à partir de son index de positions."""
+    if not isinstance(inverted_index, dict):
+        return ""
+    words = []
+    for word, positions in inverted_index.items():
+        for position in positions or []:
+            if isinstance(position, int) and 0 <= position < 1200:
+                words.append((position, word))
+    return " ".join(word for _, word in sorted(words))[:5000]
+
+
+def _topic_queries(topic):
+    """Variantes courtes pour récupérer des publications utilisant d'autres termes."""
+    variants = [topic]
+    terms = list(_terms(topic))
+    if any(x in terms for x in {"girofle", "clou", "cloves", "clove"}):
+        variants.extend([
+            "clove quality Madagascar export competitiveness",
+            "Madagascar clove value chain quality export",
+            "filière girofle Madagascar qualité exportation"
+        ])
+    return list(dict.fromkeys(variants))
 
 
 def search_web(query: str, max_results: int = 8):
@@ -138,7 +172,7 @@ def search_bibliography(topic: str, max_results: int = 8):
         response = requests.get(
             "https://api.openalex.org/works",
             params={"search": topic, "per-page": min(limit * 3, 30),
-                    "select": "id,doi,display_name,publication_year,type,authorships,primary_location"},
+                    "select": "id,doi,display_name,publication_year,type,authorships,primary_location,abstract_inverted_index"},
             headers=headers, timeout=18,
         )
         response.raise_for_status()
