@@ -230,26 +230,48 @@ def search_bibliography(topic: str, max_results: int = 8):
     except (requests.RequestException, ValueError, TypeError) as exc:
         errors.append("Open Library : " + str(exc)[:180])
 
-    # Recherche de documents : requête ciblée et filtrage de pertinence.
+    # Mémoires et thèses : utiliser directement OpenAlex plutôt que DDGS.
+    # DDGS peut appeler un service de suggestions Wikipedia (wt.wikipedia.org),
+    # ce qui provoque parfois un DNSError sans rapport avec OpenAlex/Crossref.
     try:
-        doc_query = f'{topic} mémoire thèse dissertation rapport PDF'
-        raw_docs = DDGS().text(doc_query, region="wt-wt", safesearch="moderate",
-                               max_results=min(limit * 3, 30))
-        for item in raw_docs or []:
-            url = (item.get("href") or "").strip()
-            title = (item.get("title") or "").strip()
-            snippet = (item.get("body") or "").strip()
-            if not url.startswith(("https://", "http://")):
+        response = requests.get(
+            "https://api.openalex.org/works",
+            params={
+                "search": topic,
+                "filter": "type:dissertation",
+                "per-page": min(limit * 4, 40),
+                "select": "id,doi,display_name,publication_year,type,authorships,primary_location,abstract_inverted_index",
+            },
+            headers=headers, timeout=18,
+        )
+        response.raise_for_status()
+        for work in response.json().get("results", []):
+            title = work.get("display_name") or ""
+            authors = [(a.get("author") or {}).get("display_name")
+                       for a in work.get("authorships", [])[:6]]
+            location = work.get("primary_location") or {}
+            url = location.get("landing_page_url") or work.get("doi") or work.get("id")
+            abstract = _openalex_abstract(work.get("abstract_inverted_index"))
+            score = _relevance(topic, title, abstract, url or "")
+            if score < 0.12 or not url:
                 continue
-            score = _relevance(topic, title, snippet, url)
-            if score < 0.22:
+            key = ("Documents, mémoires et thèses", _normalise(title))
+            if key in seen:
                 continue
+            seen.add(key)
             output["Documents, mémoires et thèses"].append({
-                "title": title[:300], "url": url, "snippet": snippet[:700],
-                "provider": "Recherche web", "relevance": round(score, 2),
+                "title": title[:300],
+                "year": work.get("publication_year"),
+                "authors": [a for a in authors if a][:6],
+                "url": url,
+                "snippet": abstract[:700],
+                "provider": "OpenAlex",
+                "relevance": round(score, 2),
+                "doi": work.get("doi"),
+                "type": work.get("type") or "dissertation",
             })
-    except Exception as exc:
-        errors.append("Recherche de documents : " + str(exc)[:180])
+    except (requests.RequestException, ValueError, TypeError) as exc:
+        errors.append("Recherche de documents (OpenAlex) : " + str(exc)[:180])
 
     for category in ("Articles scientifiques", "Livres", "Documents, mémoires et thèses"):
         output[category].sort(key=lambda x: x.get("relevance", 0), reverse=True)
