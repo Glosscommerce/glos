@@ -30,16 +30,16 @@ def _choose_safe_replacement(full_text: str, offset: int, original: str, replace
 
     # Preserve an explicit plural determiner. LanguageTool may rank a
     # singular rewrite first even though it changes the sentence's meaning.
-    if re.match(r"(?i)^les\\s+", stripped):
-        plural = [value for value in replacements if re.match(r"(?i)^les\\s+", value.strip())]
+    if re.match(r"(?i)^les\s+", stripped):
+        plural = [value for value in replacements if re.match(r"(?i)^les\s+", value.strip())]
         if plural:
             return plural[0], "Nombre pluriel conservé."
 
     # For "nous sommes + infinitive", choose a plural past participle.
     # Masculine plural is the conventional default when the group's gender
     # is unknown; an explicitly feminine subject selects feminine plural.
-    if re.search(r"(?i)\\bnous\\s+sommes\\s+$", before) and re.fullmatch(r"(?i)aller", stripped):
-        feminine = bool(re.search(r"(?i)\\b(elles|nous,?\\s+les\\s+femmes)\\s+sommes\\s+$", before))
+    if re.search(r"(?i)\bnous\s+sommes\s+$", before) and re.fullmatch(r"(?i)aller", stripped):
+        feminine = bool(re.search(r"(?i)\b(elles|nous,?\s+les\s+femmes)\s+sommes\s+$", before))
         preferred = "allées" if feminine else "allés"
         for value in replacements:
             if value.strip().lower() == preferred:
@@ -49,7 +49,7 @@ def _choose_safe_replacement(full_text: str, offset: int, original: str, replace
     # Do not turn a feminine singular adjective into masculine/feminine plural
     # when a clear feminine singular subject is immediately available.
     feminine_singular_subject = bool(
-        re.search(r"(?i)\\b(ma\\s+sœur|ma\\s+mere|elle|cette\\s+femme)\\b[^.!?]{0,60}$", before)
+        re.search(r"(?i)\b(ma\s+sœur|ma\s+mere|elle|cette\s+femme)\b[^.!?]{0,60}$", before)
     )
     if feminine_singular_subject and stripped.lower().endswith(("e", "ée")):
         if any(value.strip().lower() == stripped.lower() for value in replacements):
