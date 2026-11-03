@@ -90,7 +90,7 @@ if st.button("Corriger automatiquement le document", type="primary"):
         try:
             correction_doc = Document(io.BytesIO(original_bytes))
             language_code = "fr" if language == "Français" else "en-US"
-            correction_doc, applied_changes, skipped_matches, detected_count = correct_docx_with_languagetool(
+            correction_doc, applied_changes, skipped_matches, detected_count, detected_suggestions = correct_docx_with_languagetool(
                 correction_doc, language_code
             )
             corrected_output = io.BytesIO()
@@ -99,6 +99,7 @@ if st.button("Corriger automatiquement le document", type="primary"):
             st.session_state["cg_correction_changes"] = applied_changes
             st.session_state["cg_correction_skipped"] = skipped_matches
             st.session_state["cg_correction_detected"] = detected_count
+            st.session_state["cg_detected_suggestions"] = detected_suggestions
             st.success("Correction automatique terminée.")
         except requests.RequestException as e:
             st.error(f"LanguageTool est momentanément indisponible : {e}")
@@ -125,6 +126,9 @@ if "cg_corrected_docx" in st.session_state:
         p.text for p in corrected_preview_doc.paragraphs if p.text.strip()
     )
     st.text_area("Aperçu du document corrigé", corrected_preview_text, height=220)
+    if st.session_state.get("cg_detected_suggestions"):
+        st.write("Suggestions détectées par LanguageTool")
+        st.dataframe(st.session_state["cg_detected_suggestions"], use_container_width=True, hide_index=True)
     if st.session_state.get("cg_correction_changes"):
         st.write("Modifications appliquées")
         st.dataframe(st.session_state["cg_correction_changes"], use_container_width=True, hide_index=True)
