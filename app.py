@@ -82,7 +82,7 @@ st.success(f"Document chargé : {len(paragraphs)} paragraphes • {len(doc.table
 st.text_area("Aperçu", "\n\n".join([p for p in paragraphs if p.strip()][:8]), height=220)
 
 st.subheader("Correction automatique du document Word")
-st.caption("La correction utilise LanguageTool en ligne. Les segments Word dont la correction traverserait plusieurs mises en forme sont laissés intacts.")
+st.caption("La correction utilise LanguageTool en ligne et peut corriger un mot même s’il est réparti sur plusieurs segments de mise en forme Word.")
 if st.button("Corriger automatiquement le document", type="primary"):
     if language == "Malagasy":
         st.warning("La correction automatique LanguageTool n'est pas disponible pour le malagasy dans cette version.")
@@ -111,6 +111,11 @@ if "cg_corrected_docx" in st.session_state:
         file_name="correctgloss_corrige.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+    corrected_preview_doc = Document(io.BytesIO(st.session_state["cg_corrected_docx"]))
+    corrected_preview_text = "\n\n".join(
+        p.text for p in corrected_preview_doc.paragraphs if p.text.strip()
+    )
+    st.text_area("Aperçu du document corrigé", corrected_preview_text, height=220)
     if st.session_state.get("cg_correction_changes"):
         st.write("Modifications appliquées")
         st.dataframe(st.session_state["cg_correction_changes"], use_container_width=True, hide_index=True)
