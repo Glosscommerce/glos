@@ -143,12 +143,19 @@ def search_bibliography(topic: str, max_results: int = 8):
         # Pour un sujet centré sur le girofle, éviter les mémoires sur des filières
         # sans lien identifiable avec le girofle/clove.
         clove_topic = bool(topic_terms & {"girofle", "clove", "cloves"})
-        clove_match = bool(title_body & {"girofle", "clove", "cloves", "syzygium", "aromaticum"})
-        if clove_topic and not clove_match:
-            related_trade = bool(title_body & {"export", "exportation", "competitivite", "quality", "qualite"})
-            madagascar_match = bool(title_body & {"madagascar", "malgache"})
-            if not (related_trade and madagascar_match and score >= 0.32):
-                return
+        clove_words = {"girofle", "clove", "cloves", "syzygium", "aromaticum"}
+        clove_match = bool(title_body & clove_words)
+        # Écarter les travaux consacrés à une autre filière (litchi, vanille,
+        # raphia...) même s'ils parlent aussi d'exportation et de qualité.
+        other_crop_words = {
+            "litchi", "lychee", "vanille", "vanilla", "raphia",
+            "cacao", "cocoa", "cafe", "coffee", "poivre", "pepper"
+        }
+        other_crop_only = bool(title_body & other_crop_words) and not bool(
+            _terms(title) & clove_words
+        )
+        if clove_topic and (other_crop_only or not clove_match):
+            return
         # Seuil relevé pour limiter les résultats faiblement liés au sujet.
         if score < 0.20:
             return
@@ -198,7 +205,14 @@ def search_bibliography(topic: str, max_results: int = 8):
                 location = work.get("primary_location") or {}
                 url = location.get("landing_page_url") or work.get("doi") or work.get("id")
                 kind = (work.get("type") or "").lower()
-                category = "Livres" if kind in {"book", "monograph"} else "Articles scientifiques"
+                if kind in {"dissertation", "thesis"}:
+                    category = "Documents, mémoires et thèses"
+                elif kind in {"book", "monograph", "book-chapter", "edited-book"}:
+                    category = "Livres"
+                elif kind in {"article", "review", "preprint"}:
+                    category = "Articles scientifiques"
+                else:
+                    continue
                 abstract = _openalex_abstract(work.get("abstract_inverted_index"))
                 add_reference(category, title, work.get("publication_year"), authors,
                               url, "OpenAlex", work.get("doi"), abstract=abstract,
@@ -320,7 +334,16 @@ def search_bibliography(topic: str, max_results: int = 8):
             url = location.get("landing_page_url") or work.get("doi") or work.get("id")
             abstract = _openalex_abstract(work.get("abstract_inverted_index"))
             score = _relevance(topic, title, abstract, url or "")
-            if score < 0.12 or not url:
+            title_body = _terms(title + " " + abstract)
+            clove_topic = bool(_terms(topic) & {"girofle", "clove", "cloves"})
+            clove_words = {"girofle", "clove", "cloves", "syzygium", "aromaticum"}
+            clove_match = bool(title_body & clove_words)
+            other_crop_words = {"litchi", "lychee", "vanille", "vanilla", "raphia",
+                                "cacao", "cocoa", "cafe", "coffee", "poivre", "pepper"}
+            other_crop_only = bool(title_body & other_crop_words) and not bool(
+                _terms(title) & clove_words
+            )
+            if not url or score < 0.20 or (clove_topic and (not clove_match or other_crop_only)):
                 continue
             key = ("Documents, mémoires et thèses", _normalise(title))
             if key in seen:
