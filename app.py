@@ -6,6 +6,16 @@ from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import requests
 from correction_engine import correct_docx_with_languagetool
+from xml.sax.saxutils import escape
+from docx.text.paragraph import Paragraph as DocxParagraph
+from docx.table import Table as DocxTable
+from docx.oxml.ns import qn
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_RIGHT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table as PdfTable, TableStyle
 
 APP_NAME = "Mémoire Correcteur Pro"
 st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
@@ -53,6 +63,125 @@ def add_word_toc(document):
     body.remove(p._p)
     body.insert(0, p._p)
     return document
+
+
+def add_page_numbers(document):
+    """Add an automatic PAGE field to each section footer."""
+    for section in document.sections:
+        paragraph = section.footer.paragraphs[0]
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        paragraph.add_run("Page ")
+        field = __import__("docx").oxml.OxmlElement
+        begin = field("w:fldChar")
+        begin.set(qn("w:fldCharType"), "begin")
+        instruction = field("w:instrText")
+        instruction.set(qn("xml:space"), "preserve")
+        instruction.text = " PAGE "
+        separate = field("w:fldChar")
+        separate.set(qn("w:fldCharType"), "separate")
+        displayed = field("w:t")
+        displayed.text = "1"
+        run = field("w:r")
+        run.append(displayed)
+        end = field("w:fldChar")
+        end.set(qn("w:fldCharType"), "end")
+        paragraph.add_run()._r.append(begin)
+        paragraph.add_run()._r.append(instruction)
+        paragraph.add_run()._r.append(separate)
+        paragraph._p.append(run)
+        paragraph.add_run()._r.append(end)
+
+
+def build_pdf_from_docx(docx_bytes, font="Times New Roman", font_size=12,
+                        line_spacing=1.5, margin_cm=2.5):
+    """Create a readable PDF from DOCX paragraphs and tables, with page numbers."""
+    source = Document(io.BytesIO(docx_bytes))
+    styles = getSampleStyleSheet()
+    font_name = "Times-Roman" if font == "Times New Roman" else "Helvetica"
+    body_style = ParagraphStyle(
+        "CGBody", parent=styles["BodyText"], fontName=font_name,
+        fontSize=int(font_size), leading=int(font_size) * float(line_spacing),
+        spaceAfter=6, alignment=TA_JUSTIFY,
+    )
+    heading_style = ParagraphStyle(
+        "CGHeading", parent=styles["Heading2"], fontName=font_name,
+        fontSize=int(font_size) + 2, leading=(int(font_size) + 2) * 1.25,
+        spaceBefore=10, spaceAfter=6,
+    )
+    toc_style = ParagraphStyle(
+        "CGTOC", parent=body_style, leftIndent=12, spaceAfter=3,
+    )
+    blocks, headings = [], []
+    for child in source.element.body.iterchildren():
+        if child.tag == qn("w:p"):
+            paragraph = DocxParagraph(child, source)
+            value = paragraph.text.strip()
+            if not value or value.startswith("Ouvrez dans Word puis mettez à jour"):
+                continue
+            style_name = (paragraph.style.name if paragraph.style else "").lower()
+            if style_name.startswith("heading"):
+                try:
+                    level = int(style_name.replace("heading", "").strip())
+                except ValueError:
+                    level = 1
+                headings.append((level, value))
+                blocks.append(Paragraph(escape(value), heading_style))
+            else:
+                safe = escape(paragraph.text).replace("\n", "<br/>")
+                blocks.append(Paragraph(safe, body_style))
+        elif child.tag == qn("w:tbl"):
+            word_table = DocxTable(child, source)
+            data = []
+            for row in word_table.rows:
+                data.append([
+                    Paragraph(escape(cell.text).replace("\n", "<br/>"), body_style)
+                    for cell in row.cells
+                ])
+            if data:
+                col_count = max(1, max(len(row) for row in data))
+                usable_width = A4[0] - (2 * float(margin_cm) * cm)
+                pdf_table = PdfTable(
+                    data, colWidths=[usable_width / col_count] * col_count,
+                    repeatRows=1, hAlign="LEFT",
+                )
+                pdf_table.setStyle(TableStyle([
+                    ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]))
+                blocks.extend([Spacer(1, 6), pdf_table, Spacer(1, 8)])
+
+    story = []
+    if headings:
+        story.append(Paragraph("Table des matières", styles["Title"]))
+        for level, heading in headings:
+            story.append(Paragraph(("— " * max(0, level - 1)) + escape(heading), toc_style))
+        story.append(Spacer(1, 12))
+    story.extend(blocks)
+
+    output = io.BytesIO()
+    pdf = SimpleDocTemplate(
+        output, pagesize=A4,
+        rightMargin=float(margin_cm) * cm,
+        leftMargin=float(margin_cm) * cm,
+        topMargin=float(margin_cm) * cm,
+        bottomMargin=float(margin_cm) * cm + 12,
+        title="CORRECTGLOSS - Document corrigé",
+    )
+
+    def draw_page_number(canvas, document):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 9)
+        canvas.drawCentredString(A4[0] / 2, 1.2 * cm, f"Page {document.page}")
+        canvas.restoreState()
+
+    pdf.build(story, onFirstPage=draw_page_number, onLaterPages=draw_page_number)
+    return output.getvalue()
+
 
 with st.sidebar:
     st.header("Paramètres")
@@ -198,9 +327,11 @@ if st.button("Reformuler avec l'IA") and rewrite_text.strip():
         except Exception as e:
             st.error(f"Erreur IA : {e}")
 
-st.subheader("Export et mise en page")
-if st.button("Préparer le DOCX avec table des matières", type="primary"):
-    formatted = Document(io.BytesIO(original_bytes))
+st.subheader("Export Word et PDF")
+st.caption("Les exports utilisent le document corrigé automatiquement lorsqu'il est disponible, sinon le document original.")
+if st.button("Préparer les fichiers Word et PDF", type="primary"):
+    source_bytes = st.session_state.get("cg_corrected_docx", original_bytes)
+    formatted = Document(io.BytesIO(source_bytes))
     for section in formatted.sections:
         section.top_margin = section.bottom_margin = Inches(margin_cm / 2.54)
         section.left_margin = section.right_margin = Inches(margin_cm / 2.54)
@@ -212,16 +343,30 @@ if st.button("Préparer le DOCX avec table des matières", type="primary"):
         for run in para.runs:
             run.font.name = font
             run.font.size = Pt(int(font_size))
+    add_page_numbers(formatted)
     formatted = add_word_toc(formatted)
-    output = io.BytesIO()
-    formatted.save(output)
-    st.session_state["cg_docx"] = output.getvalue()
-    log_app_event("docx_export_prepared")
-    st.success("DOCX préparé. Dans Word, clic droit sur la table des matières > Mettre à jour les champs > Toute la table.")
+    word_output = io.BytesIO()
+    formatted.save(word_output)
+    docx_bytes = word_output.getvalue()
+    st.session_state["cg_docx"] = docx_bytes
+    try:
+        st.session_state["cg_pdf"] = build_pdf_from_docx(
+            docx_bytes, font=font, font_size=font_size,
+            line_spacing=line_spacing, margin_cm=margin_cm,
+        )
+        log_app_event("docx_pdf_export_prepared")
+        st.success("Les fichiers Word et PDF sont prêts.")
+    except Exception as e:
+        st.session_state.pop("cg_pdf", None)
+        st.error(f"Le fichier Word est prêt, mais la création du PDF a échoué : {e}")
 
 if "cg_docx" in st.session_state:
-    st.download_button("Télécharger le DOCX", st.session_state["cg_docx"],
-        file_name="correctgloss_memoire.docx",
+    st.download_button("Télécharger le document Word (.docx)", st.session_state["cg_docx"],
+        file_name="correctgloss_memoire_corrige.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+if "cg_pdf" in st.session_state:
+    st.download_button("Télécharger le document PDF", st.session_state["cg_pdf"],
+        file_name="correctgloss_memoire_corrige.pdf",
+        mime="application/pdf")
 
-st.caption("Les suggestions sont indicatives. Conservez toujours une copie originale du mémoire.")
+st.caption("Les suggestions sont indicatives. Vérifiez toujours le document final et conservez une copie originale.")
