@@ -281,11 +281,12 @@ def show_research_page():
                 )
             else:
                 url = (item.get("url") or "").strip()
+                search_text = title + (" " + " ".join(authors) if authors else "")
+                scholar_url = "https://scholar.google.com/scholar?q=" + quote_plus(search_text)
+                st.markdown(f"- **{title}**")
                 if url.startswith(("https://", "http://")):
-                    st.markdown(f"- **[{title}]({url})**")
-                else:
-                    st.markdown(f"- **{title}**")
-                    st.caption("Lien direct indisponible pour cette référence.")
+                    st.markdown(f"  [Consulter la source d'origine]({url})")
+                st.markdown(f"  [Retrouver cette référence dans Google Scholar]({scholar_url})")
             if authors:
                 st.caption("Auteur(s) : " + ", ".join(authors))
             if item.get("year"):
