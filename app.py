@@ -39,7 +39,7 @@ def add_word_toc(document):
     begin.set(qn("w:fldCharType"), "begin")
     instr = OxmlElement("w:instrText")
     instr.set(qn("xml:space"), "preserve")
-    instr.text = ' TOC \\\\o "1-3" \\\\h \\\\z \\\\u '
+    instr.text = ' TOC \\o "1-3" \\h \\z \\u '
     separate = OxmlElement("w:fldChar")
     separate.set(qn("w:fldCharType"), "separate")
     text_run = OxmlElement("w:r")
