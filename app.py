@@ -214,7 +214,7 @@ with st.expander("Correction manuelle du texte", expanded=False):
     manual_source_bytes = st.session_state.get("cg_corrected_docx", original_bytes)
     manual_document = Document(io.BytesIO(manual_source_bytes))
     manual_paragraphs = [p for p in manual_document.paragraphs if p.text.strip()]
-    manual_initial_text = "\\n\\n".join(p.text for p in manual_paragraphs)
+    manual_initial_text = "\n\n".join(p.text for p in manual_paragraphs)
     manual_version = "corrige" if "cg_corrected_docx" in st.session_state else "original"
     manual_text = st.text_area(
         "Modifiez directement le texte (gardez le même nombre de paragraphes séparés par une ligne vide).",
@@ -224,7 +224,7 @@ with st.expander("Correction manuelle du texte", expanded=False):
     )
     st.caption("La correction manuelle concerne les paragraphes du corps du document. Relisez la mise en forme après application.")
     if st.button("Appliquer les corrections manuelles"):
-        edited_paragraphs = manual_text.split("\\n\\n")
+        edited_paragraphs = manual_text.split("\n\n")
         if len(edited_paragraphs) != len(manual_paragraphs):
             st.error(
                 f"Le nombre de paragraphes doit rester identique : "
