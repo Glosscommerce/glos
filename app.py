@@ -9,6 +9,7 @@ from correction_engine import correct_docx_with_languagetool
 from xml.sax.saxutils import escape
 from docx.text.paragraph import Paragraph as DocxParagraph
 from docx.table import Table as DocxTable
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_RIGHT
@@ -71,25 +72,23 @@ def add_page_numbers(document):
         paragraph = section.footer.paragraphs[0]
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         paragraph.add_run("Page ")
-        field = __import__("docx").oxml.OxmlElement
-        begin = field("w:fldChar")
+        run = paragraph.add_run()
+        begin = OxmlElement("w:fldChar")
         begin.set(qn("w:fldCharType"), "begin")
-        instruction = field("w:instrText")
+        instruction = OxmlElement("w:instrText")
         instruction.set(qn("xml:space"), "preserve")
         instruction.text = " PAGE "
-        separate = field("w:fldChar")
+        separate = OxmlElement("w:fldChar")
         separate.set(qn("w:fldCharType"), "separate")
-        displayed = field("w:t")
+        displayed = OxmlElement("w:t")
         displayed.text = "1"
-        run = field("w:r")
-        run.append(displayed)
-        end = field("w:fldChar")
+        end = OxmlElement("w:fldChar")
         end.set(qn("w:fldCharType"), "end")
-        paragraph.add_run()._r.append(begin)
-        paragraph.add_run()._r.append(instruction)
-        paragraph.add_run()._r.append(separate)
-        paragraph._p.append(run)
-        paragraph.add_run()._r.append(end)
+        run._r.append(begin)
+        run._r.append(instruction)
+        run._r.append(separate)
+        run._r.append(displayed)
+        run._r.append(end)
 
 
 def build_pdf_from_docx(docx_bytes, font="Times New Roman", font_size=12,
