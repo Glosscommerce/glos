@@ -210,6 +210,37 @@ text = "\n\n".join(p for p in paragraphs if p.strip())
 st.success(f"Document chargé : {len(paragraphs)} paragraphes • {len(doc.tables)} tableaux")
 st.text_area("Aperçu", "\n\n".join([p for p in paragraphs if p.strip()][:8]), height=220)
 
+with st.expander("Correction manuelle du texte", expanded=False):
+    manual_source_bytes = st.session_state.get("cg_corrected_docx", original_bytes)
+    manual_document = Document(io.BytesIO(manual_source_bytes))
+    manual_paragraphs = [p for p in manual_document.paragraphs if p.text.strip()]
+    manual_initial_text = "\\n\\n".join(p.text for p in manual_paragraphs)
+    manual_version = "corrige" if "cg_corrected_docx" in st.session_state else "original"
+    manual_text = st.text_area(
+        "Modifiez directement le texte (gardez le même nombre de paragraphes séparés par une ligne vide).",
+        value=manual_initial_text,
+        height=300,
+        key=f"cg_manual_text_{uploaded.name}_{len(original_bytes)}_{manual_version}",
+    )
+    st.caption("La correction manuelle concerne les paragraphes du corps du document. Relisez la mise en forme après application.")
+    if st.button("Appliquer les corrections manuelles"):
+        edited_paragraphs = manual_text.split("\\n\\n")
+        if len(edited_paragraphs) != len(manual_paragraphs):
+            st.error(
+                f"Le nombre de paragraphes doit rester identique : "
+                f"{len(manual_paragraphs)} attendu(s), {len(edited_paragraphs)} reçu(s)."
+            )
+        else:
+            for paragraph, edited_value in zip(manual_paragraphs, edited_paragraphs):
+                paragraph.text = edited_value
+            manual_output = io.BytesIO()
+            manual_document.save(manual_output)
+            st.session_state["cg_corrected_docx"] = manual_output.getvalue()
+            st.session_state.pop("cg_docx", None)
+            st.session_state.pop("cg_pdf", None)
+            log_app_event("manual_correction_applied")
+            st.success("Corrections manuelles appliquées. Préparez ensuite les fichiers Word et PDF.")
+
 st.subheader("Correction automatique du document Word")
 st.caption("La correction utilise LanguageTool en ligne et peut corriger un mot même s’il est réparti sur plusieurs segments de mise en forme Word.")
 if st.button("Corriger automatiquement le document", type="primary"):
