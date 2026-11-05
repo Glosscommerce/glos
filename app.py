@@ -187,6 +187,9 @@ if st.button("Corriger automatiquement le document", type="primary"):
             correction_doc, applied_changes, skipped_matches, detected_count, detected_suggestions = correct_docx_with_languagetool(
                 correction_doc, language_code
             )
+            # Refaire le diagnostic sur le document réellement corrigé,
+            # afin de signaler les artefacts éventuellement laissés après correction.
+            corrected_structure_report = analyze_document_structure(correction_doc)
             corrected_output = io.BytesIO()
             correction_doc.save(corrected_output)
             st.session_state["cg_corrected_docx"] = corrected_output.getvalue()
@@ -194,6 +197,7 @@ if st.button("Corriger automatiquement le document", type="primary"):
             st.session_state["cg_correction_skipped"] = skipped_matches
             st.session_state["cg_correction_detected"] = detected_count
             st.session_state["cg_detected_suggestions"] = detected_suggestions
+            st.session_state["cg_corrected_structure_report"] = corrected_structure_report
             st.success("Correction automatique terminée.")
         except requests.RequestException as e:
             st.error(f"LanguageTool est momentanément indisponible : {e}")
@@ -220,6 +224,18 @@ if "cg_corrected_docx" in st.session_state:
         p.text for p in corrected_preview_doc.paragraphs if p.text.strip()
     )
     st.text_area("Aperçu du document corrigé", corrected_preview_text, height=220)
+    corrected_report = st.session_state.get("cg_corrected_structure_report")
+    if corrected_report:
+        with st.expander("Anomalies restantes après correction automatique", expanded=True):
+            st.caption("Ces éléments sont signalés pour vérification. CORRECTGLOSS ne supprime pas automatiquement les paragraphes, titres ou références.")
+            if corrected_report["repeated_paragraphs"]:
+                st.warning("Des paragraphes identiques restent présents.")
+                st.dataframe(corrected_report["repeated_paragraphs"], use_container_width=True, hide_index=True)
+            if corrected_report["suspicious_artefacts"]:
+                st.warning("Des fragments de texte ou incohérences de structure restent à vérifier.")
+                st.dataframe(corrected_report["suspicious_artefacts"], use_container_width=True, hide_index=True)
+            if not corrected_report["repeated_paragraphs"] and not corrected_report["suspicious_artefacts"]:
+                st.success("Aucune anomalie de structure correspondant aux règles de contrôle n'a été détectée.")
     if st.session_state.get("cg_detected_suggestions"):
         st.write("Suggestions détectées par LanguageTool")
         st.dataframe(st.session_state["cg_detected_suggestions"], use_container_width=True, hide_index=True)
