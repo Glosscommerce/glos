@@ -200,62 +200,38 @@ def show_research_page():
 
     @st.dialog("📖 Lecture du livre dans CORRECTGLOSS", width="large")
     def open_book_inside_app(book_title, book_author="", google_books_id=None,
-                             viewability="NO_PAGES", preview_link=""):
+                             viewability="NO_PAGES", preview_link="", source_url=""):
         st.write(f"**{book_title}**")
         if book_author:
             st.caption("Auteur(s) : " + book_author)
-        try:
-            selected = None
-            if google_books_id:
-                # Réutiliser l'identifiant déjà obtenu pendant la recherche :
-                # évite un deuxième appel API et limite les erreurs 429.
-                selected = {
-                    "id": google_books_id,
-                    "accessInfo": {"viewability": viewability},
-                    "volumeInfo": {"previewLink": preview_link},
-                }
-            else:
-                with st.spinner("Recherche d'un aperçu consultable..."):
-                    response = requests.get(
-                        "https://www.googleapis.com/books/v1/volumes",
-                        params={"q": 'intitle:"' + book_title + '"', "maxResults": 3},
-                        timeout=15,
-                    )
-                    response.raise_for_status()
-                    volumes = response.json().get("items", [])
-                for volume in volumes:
-                    info = volume.get("volumeInfo", {})
-                    candidate_title = info.get("title", "")
-                    if candidate_title and (
-                        candidate_title.lower() == book_title.lower()
-                        or book_title.lower() in candidate_title.lower()
-                        or candidate_title.lower() in book_title.lower()
-                    ):
-                        selected = volume
-                        break
-                if selected is None and volumes:
-                    selected = volumes[0]
-            if not selected:
-                st.info("Aucun aperçu numérique disponible pour ce titre. Le catalogue a trouvé la référence, mais pas de fichier lisible intégré.")
-                return
-            volume_id = selected.get("id")
-            access = selected.get("accessInfo", {})
-            viewability = access.get("viewability", "NO_PAGES")
-            if volume_id and viewability in {"ALL_PAGES", "PARTIAL", "TEXT_ONLY"}:
-                st.success("Aperçu disponible — lecture intégrée ci-dessous.")
-                st.components.v1.iframe(
-                    f"https://books.google.com/books?id={quote_plus(volume_id)}&printsec=frontcover&output=embed",
-                    height=650,
-                    scrolling=True,
-                )
-                st.caption("L'étendue des pages visibles dépend des droits et des réglages de l'éditeur.")
-            else:
-                st.info("Ce livre est bien référencé, mais Google Books ne fournit pas de pages consultables intégrables. CORRECTGLOSS ne peut pas afficher le livre complet sans accès légal au texte.")
-                preview = (selected.get("volumeInfo") or {}).get("previewLink")
-                if preview:
-                    st.markdown(f"[Consulter la fiche/aperçu disponible]({preview})")
-        except Exception as exc:
-            st.warning(f"Le lecteur n'a pas pu charger l'aperçu : {exc}")
+        # Ne pas relancer une recherche Google Books à chaque clic :
+        # cela provoquait des HTTP 429 et pouvait sélectionner un livre sans rapport.
+        if not google_books_id:
+            st.info(
+                "Aucun identifiant Google Books vérifié n'est associé à cette référence. "
+                "CORRECTGLOSS n'interroge pas à nouveau l'API pour éviter les limites de quota."
+            )
+            if source_url and source_url.startswith(("https://", "http://")):
+                st.markdown(f"[Consulter la notice originale]({source_url})")
+            if preview_link and preview_link.startswith(("https://", "http://")):
+                st.markdown(f"[Consulter l'aperçu Google Books]({preview_link})")
+            return
+
+        if viewability in {"ALL_PAGES", "PARTIAL", "TEXT_ONLY"}:
+            st.success("Aperçu disponible — lecture intégrée ci-dessous.")
+            st.components.v1.iframe(
+                f"https://books.google.com/books?id={quote_plus(google_books_id)}&printsec=frontcover&output=embed",
+                height=650,
+                scrolling=True,
+            )
+            st.caption("L'étendue des pages visibles dépend des droits et des réglages de l'éditeur.")
+        else:
+            st.info(
+                "Cette référence ne dispose pas de pages consultables intégrables dans Google Books. "
+                "CORRECTGLOSS ne peut pas afficher le livre complet sans accès légal au texte."
+            )
+            if preview_link and preview_link.startswith(("https://", "http://")):
+                st.markdown(f"[Consulter la fiche/aperçu disponible]({preview_link})")
 
     for category in ["Auteurs et chercheurs", "Livres", "Articles scientifiques", "Documents, mémoires et thèses"]:
         entries = bibliography.get(category, [])
@@ -298,7 +274,8 @@ def show_research_page():
                     key=f"cg_read_book_{index}_{quote_plus(title)[:40]}",
                     on_click=open_book_inside_app,
                     args=(title, ", ".join(authors), item.get("google_books_id"),
-                          item.get("viewability", "NO_PAGES"), item.get("preview_link", "")),
+                          item.get("viewability", "NO_PAGES"), item.get("preview_link", ""),
+                          item.get("url", "")),
                 )
             else:
                 url = (item.get("url") or "").strip()
