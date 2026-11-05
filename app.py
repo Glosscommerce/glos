@@ -200,10 +200,29 @@ def show_research_page():
 
     @st.dialog("📖 Lecture du livre dans CORRECTGLOSS", width="large")
     def open_book_inside_app(book_title, book_author="", google_books_id=None,
-                             viewability="NO_PAGES", preview_link="", source_url=""):
+                             viewability="NO_PAGES", preview_link="", source_url="",
+                             archive_ids=None):
         st.write(f"**{book_title}**")
         if book_author:
             st.caption("Auteur(s) : " + book_author)
+
+        # Open Library / Internet Archive : intégrer le lecteur lorsqu'un scan est disponible.
+        archive_id = next(iter(archive_ids or []), None)
+        if archive_id:
+            st.success("Un exemplaire numérisé est associé à cette notice.")
+            st.components.v1.iframe(
+                f"https://archive.org/stream/{quote_plus(str(archive_id))}/page/n0/mode/2up",
+                height=700,
+                scrolling=True,
+            )
+            st.caption(
+                "La lecture dépend des droits et des conditions d'accès d'Internet Archive. "
+                "Si le lecteur refuse l'accès, utilisez la notice originale."
+            )
+            if source_url and source_url.startswith(("https://", "http://")):
+                st.markdown(f"[Notice du livre]({source_url})")
+            return
+
         # Ne pas relancer une recherche Google Books à chaque clic :
         # cela provoquait des HTTP 429 et pouvait sélectionner un livre sans rapport.
         if not google_books_id:
@@ -275,7 +294,7 @@ def show_research_page():
                     on_click=open_book_inside_app,
                     args=(title, ", ".join(authors), item.get("google_books_id"),
                           item.get("viewability", "NO_PAGES"), item.get("preview_link", ""),
-                          item.get("url", "")),
+                          item.get("url", ""), item.get("archive_ids", [])),
                 )
             else:
                 url = (item.get("url") or "").strip()
