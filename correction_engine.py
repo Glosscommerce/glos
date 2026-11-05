@@ -14,6 +14,41 @@ import time
 LANGUAGETOOL_URL = "https://api.languagetool.org/v2/check"
 MAX_CHUNK_CHARS = 12_000
 
+# Noms propres, lieux, organismes, bases de données et termes scientifiques
+# qui ne doivent jamais être « corrigés » automatiquement par LanguageTool.
+PROTECTED_TERMS = (
+    "Toamasina", "Madagascar", "Syzygium aromaticum",
+    "Jay B. Barney", "Barney", "W. Edwards Deming", "Deming",
+    "WITS", "World Integrated Trade Solution", "UN Comtrade",
+    "Comtrade", "INSTAT", "CIRAD", "Lechaudel",
+    "ISO", "COMESA", "SADC", "GATT", "SWIFT",
+)
+
+
+def _protected_spans(text: str):
+    """Return offsets of protected names, acronyms, URLs, emails and citations."""
+    spans = []
+    for term in sorted(PROTECTED_TERMS, key=len, reverse=True):
+        pattern = re.compile(r"(?<!\\w)" + re.escape(term) + r"(?!\\w)", re.IGNORECASE)
+        spans.extend((m.start(), m.end()) for m in pattern.finditer(text))
+
+    # Protect technical acronyms and identifiers such as WITS, INSTAT, DOI and URLs.
+    patterns = (
+        r"\\b[A-Z][A-Z0-9]{1,}(?:[-/][A-Z0-9]+)*\\b",
+        r"https?://\\S+|www\\.\\S+",
+        r"\\b[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}\\b",
+        r"\\b(?:doi\\s*:\\s*)?10\\.\\d{4,9}/\\S+",
+        r"\\b[A-Z][a-zÀ-ÿ'-]+(?:\\s+[A-Z][a-zÀ-ÿ'-]+){1,3}\\s*\\(\\s*\\d{4}\\s*\\)",
+    )
+    for expression in patterns:
+        spans.extend((m.start(), m.end()) for m in re.finditer(expression, text))
+    return spans
+
+
+def _overlaps_protected_span(start: int, end: int, spans) -> bool:
+    return any(start < protected_end and end > protected_start
+               for protected_start, protected_end in spans)
+
 
 
 def _choose_safe_replacement(full_text: str, offset: int, original: str, replacements: list[str]):
@@ -191,6 +226,7 @@ def correct_docx_with_languagetool(document, language_code: str):
     
             result = _post_languagetool(text, language_code)
             matches = result.get("matches", [])
+            protected_spans = _protected_spans(text)
     
             paragraph_starts = []
             cursor = 0
@@ -205,6 +241,14 @@ def correct_docx_with_languagetool(document, language_code: str):
                 length = int(match.get("length", 0))
                 replacements = match.get("replacements") or []
                 original_text = text[offset:offset + length]
+                if length > 0 and _overlaps_protected_span(
+                    offset, offset + length, protected_spans
+                ):
+                    skipped.append({
+                        "Texte": original_text,
+                        "Raison": "Nom propre, sigle, référence ou terme protégé : aucune modification automatique.",
+                    })
+                    continue
                 replacement_values = [
                     item.get("value", "") for item in replacements
                     if item.get("value", "")
