@@ -150,10 +150,16 @@ def analyze_document_structure(document):
     artefacts = []
     paragraphs = list(_document_paragraphs(document))
 
+    # Ces règles signalent des éléments à contrôler sans jamais les supprimer.
+    # Certaines correspondent à des artefacts observés dans des documents importés;
+    # les résultats restent des alertes, car un terme isolé peut être légitime.
     suspicious_patterns = (
-        (r"\b[A-Za-zÀ-ÿ]+\+\d+\b", "Marqueur technique ou artefact (ex. Data+1)."),
-        (r"\b(?:L\d+\s+)?Rapport\s+final\b", "Élément de version ou titre répété à vérifier."),
-        (r"\b[A-Za-zÀ-ÿ]{8,}(?:recherche|variables|données)[A-Za-zÀ-ÿ]{4,}\b", "Mots possiblement fusionnés."),
+        (r"\b[A-Za-zÀ-ÿ]+\+\d+\b", "Marqueur technique ajouté à une citation (ex. Data+1)."),
+        (r"\b(?:L\d+\s+)?Rapport\s+final\b", "Titre ou marqueur de version à vérifier dans le document."),
+        (r"\bvariablesreposeerche\b", "Fusion probable de plusieurs mots : « variables de la recherche »."),
+        (r"\bAnalanjirofod\b", "Nom géographique possiblement altéré : vérifier « Analanjirofo »."),
+        (r"Les Publications du CIRAD(?:\+\d+)?", "Libellé de plateforme bibliographique à vérifier; remplacer par une référence complète si nécessaire."),
+        (r"(?<!\w)(?:ECOLEX|ECOLE)(?!\w)", "Libellé isolé pouvant provenir d'un extrait de source; vérifier le contexte."),
     )
 
     for index, paragraph in enumerate(paragraphs, start=1):
@@ -168,6 +174,7 @@ def analyze_document_structure(document):
                     "Paragraphe": index,
                     "Élément": match.group(0),
                     "Raison": reason,
+                    "Action": "À vérifier manuellement — le texte original est conservé.",
                 })
 
     repeated = []
