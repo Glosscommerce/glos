@@ -81,7 +81,6 @@ class CorrectionEngineTests(unittest.TestCase):
         self.assertEqual(detected, 2)
         self.assertEqual(mocked_post.call_count, 3)
 
-
     def test_structure_diagnostics_detect_known_artifacts_without_editing(self):
         document = Document()
         document.add_paragraph("variablesreposeerche")
@@ -98,7 +97,7 @@ class CorrectionEngineTests(unittest.TestCase):
         self.assertIn("variablesreposeerche", flagged)
         self.assertIn("analanjirofod", flagged)
         self.assertIn("data+1", flagged)
-        self.assertIn("les publications du cirad", flagged)
+        self.assertIn("les publications du cirad+1", flagged)
         self.assertIn("ecolex", flagged)
         self.assertEqual(before, after)
         self.assertTrue(all("Action" in item for item in report["suspicious_artefacts"]))
