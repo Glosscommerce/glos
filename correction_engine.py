@@ -200,10 +200,8 @@ def correct_docx_with_languagetool(document, language_code: str):
                     continue
     
                 if replacement.strip() == original_text.strip():
-                    skipped.append({
-                        "Texte": original_text,
-                        "Raison": "La suggestion ne modifie pas le texte.",
-                    })
+                    # A repeated suggestion after a previous pass is not an
+                    # unapplied correction; simply ignore this no-op match.
                     continue
 
                 owner = next(
