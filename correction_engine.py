@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import requests
 import re
+import time
 
 
 LANGUAGETOOL_URL = "https://api.languagetool.org/v2/check"
@@ -113,24 +114,60 @@ def _run_spans(paragraph):
 
 
 def _chunks(paragraphs):
+    """Split document text into bounded requests while retaining paragraph offsets."""
     current = []
     current_size = 0
     for paragraph in paragraphs:
         value = paragraph.text or ""
         if not value.strip():
             continue
+        if len(value) > MAX_CHUNK_CHARS:
+            if current:
+                yield current
+                current, current_size = [], 0
+            start = 0
+            while start < len(value):
+                end = min(start + MAX_CHUNK_CHARS, len(value))
+                if end < len(value):
+                    # Prefer a nearby sentence/word boundary, but always make progress.
+                    boundary = max(value.rfind(". ", start, end),
+                                   value.rfind("! ", start, end),
+                                   value.rfind("? ", start, end),
+                                   value.rfind(" ", start, end))
+                    if boundary > start + MAX_CHUNK_CHARS // 2:
+                        end = boundary + 1
+                yield [(paragraph, start, value[start:end])]
+                start = end
+            continue
         if current and current_size + len(value) + 1 > MAX_CHUNK_CHARS:
             yield current
             current, current_size = [], 0
-        if len(value) > MAX_CHUNK_CHARS:
-            # Keep a long paragraph intact so offsets remain stable when edits
-            # are applied. It is sent as one request rather than split.
-            yield [(paragraph, 0, value)]
-        else:
-            current.append((paragraph, 0, value))
-            current_size += len(value) + 1
+        current.append((paragraph, 0, value))
+        current_size += len(value) + 1
     if current:
         yield current
+
+
+def _post_languagetool(text: str, language_code: str):
+    """Retry temporary LanguageTool failures such as HTTP 429 and 5xx."""
+    for attempt in range(3):
+        try:
+            response = requests.post(
+                LANGUAGETOOL_URL,
+                data={"text": text, "language": language_code},
+                timeout=60,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            temporary = status == 429 or (status is not None and status >= 500)
+            temporary = temporary or isinstance(
+                exc, (requests.Timeout, requests.ConnectionError)
+            )
+            if not temporary or attempt == 2:
+                raise
+            time.sleep(1 + attempt * 2)
 
 
 def correct_docx_with_languagetool(document, language_code: str):
@@ -152,13 +189,8 @@ def correct_docx_with_languagetool(document, language_code: str):
             if not text.strip():
                 continue
     
-            response = requests.post(
-                LANGUAGETOOL_URL,
-                data={"text": text, "language": language_code},
-                timeout=35,
-            )
-            response.raise_for_status()
-            matches = response.json().get("matches", [])
+            result = _post_languagetool(text, language_code)
+            matches = result.get("matches", [])
     
             paragraph_starts = []
             cursor = 0
