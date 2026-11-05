@@ -60,7 +60,16 @@ def add_word_toc(document):
                     parent.remove(paragraph._p)
 
     title = document.add_paragraph("TABLE DES MATIÈRES")
-    title.style = "Title"
+    # Some uploaded DOCX templates omit the built-in "Title" paragraph style.
+    # Use the guaranteed Normal style and apply title formatting directly.
+    try:
+        title.style = document.styles["Title"]
+    except KeyError:
+        title.style = document.styles["Normal"]
+    title.alignment = 1  # centered
+    for title_run in title.runs:
+        title_run.bold = True
+        title_run.font.size = __import__("docx").shared.Pt(14)
     field_paragraph = document.add_paragraph()
     run = field_paragraph.add_run()
     begin = OxmlElement("w:fldChar")
