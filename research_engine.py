@@ -182,6 +182,8 @@ def search_bibliography(topic: str, max_results: int = 8):
     session.mount("https://", HTTPAdapter(max_retries=retry_policy))
     session.mount("http://", HTTPAdapter(max_retries=retry_policy))
 
+    headers = {"User-Agent": "CORRECTGLOSS/2.0 (academic bibliography search)"}
+
     if len(topic) < 3:
         raise ValueError("Saisissez un thème de recherche d'au moins 3 caractères.")
     output = {
