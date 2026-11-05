@@ -112,6 +112,12 @@ LOCAL_CORRECTION_RULES = (
      "Selon les données", "Correction d'une expression manifestement altérée."),
     (r"(?i)\bvariablesreposeerche\b",
      "variables de recherche", "Séparation de mots fusionnés."),
+    (r"(?i)\\bLe MICTSL et une société priv[eé]e?\\b",
+     "Le MICTSL est une société privée", "Correction ciblée de « est » et de l'accord de « privée »."),
+    (r"(?i)\\bmon visité d['’]entreprise\\b",
+     "ma visite d’entreprise", "Correction du déterminant et du nom « visite »."),
+    (r"(?i)\\bles équipements moderne\\b",
+     "les équipements modernes", "Accord de l'adjectif avec le nom pluriel."),
 )
 
 
@@ -218,7 +224,15 @@ def analyze_document_structure(document):
         (r"\bAnalanjirofod\b", "Nom géographique possiblement altéré : vérifier « Analanjirofo »."),
         (r"Les Publications du CIRAD(?:\+\d+)?", "Libellé de plateforme bibliographique à vérifier; remplacer par une référence complète si nécessaire."),
         (r"(?<!\w)(?:ECOLEX|ECOLE)(?!\w)", "Libellé isolé pouvant provenir d'un extrait de source; vérifier le contexte."),
-    )
+
+        (r"\\b(?:spécialisé|spécialisée|spécialise)(?:\\s+au)?(?:spécialise|spécialisée|containerisé)[A-Za-zÀ-ÿ]*",
+         "Suite de mots fusionnés ou répétés : phrase probablement corrompue."),
+        (r"\\bprovoqué\\s+par\\s+provoqué\\w*",
+         "Répétition ou fusion suspecte dans une phrase; comparer avec le document original."),
+        (r"[æ�]|%ICTSL",
+         "Caractère anormal ou sigle altéré; vérifier le texte source."),
+        (r"\\b(?:I|II|III|IV|V|VI|VII|VIII|IX|X)\\.\\s+(?:I|II|III|IV|V|VI|VII|VIII|IX|X)\\.",
+         "Numérotation de titre possiblement doublée ou incohérente."),    )
 
     for index, paragraph in enumerate(paragraphs, start=1):
         raw = paragraph.text or ""
@@ -244,6 +258,18 @@ def analyze_document_structure(document):
                 "Extrait": items[0][1],
                 "Action": "À vérifier manuellement — aucune suppression automatique.",
             })
+
+    # Repérer les couvertures contradictoires sans choisir ni supprimer un titre.
+    full_text = "\\n".join(paragraph.text or "" for paragraph in paragraphs)
+    has_visit_report = bool(re.search(r"(?i)RAPPORT\\s+DE\\s+VISITE", full_text))
+    has_licence_memoire = bool(re.search(r"(?i)M[ÉE]MOIRE\\s+DE\\s+LICENCE", full_text))
+    if has_visit_report and has_licence_memoire:
+        artefacts.append({
+            "Paragraphe": 0,
+            "Élément": "RAPPORT DE VISITE / MÉMOIRE DE LICENCE",
+            "Raison": "Deux types de document apparaissent dans le même fichier; confirmer le titre officiel.",
+            "Action": "À vérifier manuellement — aucun titre n'est supprimé.",
+        })
 
     return {
         "paragraph_count": len(paragraphs),
