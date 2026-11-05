@@ -9,6 +9,8 @@ from __future__ import annotations
 import requests
 import re
 import time
+import unicodedata
+from collections import defaultdict
 
 
 LANGUAGETOOL_URL = "https://api.languagetool.org/v2/check"
@@ -135,6 +137,54 @@ def _document_paragraphs(document):
                 for paragraph in _iter_table_paragraphs(table):
                     if add(paragraph):
                         yield paragraph
+
+
+
+def analyze_document_structure(document):
+    """Detect repeated paragraphs and suspicious text artefacts without editing content.
+
+    The function is deliberately diagnostic: it never deletes, merges, or rewrites
+    paragraphs. Positions are reported so the author can review each occurrence.
+    """
+    occurrences = defaultdict(list)
+    artefacts = []
+    paragraphs = list(_document_paragraphs(document))
+
+    suspicious_patterns = (
+        (r"\\b[A-Za-zÀ-ÿ]+\\+\\d+\\b", "Marqueur technique ou artefact (ex. Data+1)."),
+        (r"\\b(?:L\\d+\\s+)?Rapport\\s+final\\b", "Élément de version ou titre répété à vérifier."),
+        (r"\\b[A-Za-zÀ-ÿ]{8,}(?:recherche|variables|données)[A-Za-zÀ-ÿ]{4,}\\b", "Mots possiblement fusionnés."),
+    )
+
+    for index, paragraph in enumerate(paragraphs, start=1):
+        raw = paragraph.text or ""
+        normalized = unicodedata.normalize("NFKC", raw)
+        normalized = re.sub(r"\\s+", " ", normalized).strip().casefold()
+        if len(normalized) >= 50:
+            occurrences[normalized].append((index, raw[:180]))
+        for pattern, reason in suspicious_patterns:
+            for match in re.finditer(pattern, raw, re.IGNORECASE):
+                artefacts.append({
+                    "Paragraphe": index,
+                    "Élément": match.group(0),
+                    "Raison": reason,
+                })
+
+    repeated = []
+    for items in occurrences.values():
+        if len(items) > 1:
+            repeated.append({
+                "Occurrences": len(items),
+                "Paragraphes": ", ".join(str(item[0]) for item in items),
+                "Extrait": items[0][1],
+                "Action": "À vérifier manuellement — aucune suppression automatique.",
+            })
+
+    return {
+        "paragraph_count": len(paragraphs),
+        "repeated_paragraphs": sorted(repeated, key=lambda item: item["Paragraphes"]),
+        "suspicious_artefacts": artefacts,
+    }
 
 
 def _run_spans(paragraph):
