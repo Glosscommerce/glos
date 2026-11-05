@@ -2,7 +2,7 @@ import io
 import unittest
 
 from docx import Document
-from export_engine import add_page_numbers, build_pdf_from_docx
+from export_engine import add_page_numbers, apply_academic_heading_styles, build_pdf_from_docx
 
 
 class ExportEngineTests(unittest.TestCase):
@@ -26,6 +26,25 @@ class ExportEngineTests(unittest.TestCase):
 
     def test_pdf_is_created_from_paragraphs_and_tables(self):
         document = self.make_document()
+        buffer = io.BytesIO()
+        document.save(buffer)
+        pdf_bytes = build_pdf_from_docx(buffer.getvalue())
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertGreater(len(pdf_bytes), 1000)
+
+    def test_academic_heading_is_styled_for_word_toc(self):
+        document = Document()
+        paragraph = document.add_paragraph("I. INTRODUCTION GÉNÉRALE")
+        apply_academic_heading_styles(document)
+        self.assertEqual(paragraph.style.name, "Heading 1")
+
+    def test_pdf_generates_contents_and_keeps_body_text(self):
+        document = Document()
+        document.add_paragraph("Table des matières")
+        document.add_paragraph("— I. INTRODUCTION GÉNÉRALE")
+        document.add_paragraph("PROJET DE RECHERCHE – MASTER 2")
+        document.add_paragraph("I. INTRODUCTION GÉNÉRALE")
+        document.add_paragraph("Le girofle est un produit agricole.")
         buffer = io.BytesIO()
         document.save(buffer)
         pdf_bytes = build_pdf_from_docx(buffer.getvalue())
