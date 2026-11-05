@@ -316,7 +316,7 @@ def search_bibliography(topic: str, max_results: int = 8):
             response = requests.get(
                 "https://openlibrary.org/search.json",
                 params={"q": search_term, "limit": min(limit * 2, 20),
-                        "fields": "title,author_name,first_publish_year,key,subject"},
+                        "fields": "title,author_name,first_publish_year,key,subject,ia,has_fulltext,public_scan,edition_key,cover_i"},
                 headers=headers, timeout=18,
             )
             response.raise_for_status()
@@ -325,10 +325,19 @@ def search_bibliography(topic: str, max_results: int = 8):
                 if not key.startswith("/works/"):
                     continue
                 subjects = ", ".join((item.get("subject") or [])[:12])
+                before_count = len(output["Livres"])
                 add_reference("Livres", item.get("title"),
                               item.get("first_publish_year"), item.get("author_name", []),
                               "https://openlibrary.org" + key, "Open Library",
                               abstract=subjects, work_type="book")
+                if len(output["Livres"]) > before_count:
+                    book = output["Livres"][-1]
+                    book["open_library_key"] = key
+                    book["archive_ids"] = item.get("ia") or []
+                    book["has_fulltext"] = bool(item.get("has_fulltext"))
+                    book["public_scan"] = bool(item.get("public_scan"))
+                    book["edition_keys"] = item.get("edition_key") or []
+                    book["cover_id"] = item.get("cover_i")
         except (requests.RequestException, ValueError, TypeError) as exc:
             errors.append("Open Library : " + str(exc)[:180])
             break
