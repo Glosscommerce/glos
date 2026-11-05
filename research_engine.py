@@ -154,6 +154,7 @@ _BIBLIO_CACHE_MAX = 64
 
 def search_bibliography(topic: str, max_results: int = 8):
     """Recherche avec cache mémoire et protection contre les limites temporaires."""
+    import requests
     from requests.adapters import HTTPAdapter
     from urllib3.util.retry import Retry
 
