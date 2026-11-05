@@ -310,7 +310,10 @@ def show_research_page():
                 st.caption(f"Année : {item['year']}")
             if item.get("doi"):
                 doi_value = str(item["doi"]).replace("https://doi.org/", "").strip()
-                st.markdown(f"DOI : [ouvrir la publication](https://doi.org/{doi_value})")
+                doi_status = item.get("doi_status", "non vérifié")
+                st.markdown(f"DOI : [ouvrir la publication](https://doi.org/{doi_value}) — **{doi_status}**")
+            elif item.get("source_status"):
+                st.caption("Lien de la notice : " + str(item.get("source_status")))
             if item.get("relevance") is not None:
                 st.caption(f"Pertinence estimée : {round(float(item['relevance']) * 100)} %")
             if item.get("snippet"):
