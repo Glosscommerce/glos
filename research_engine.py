@@ -6,6 +6,9 @@ bibliographiques : toujours vérifier la notice originale avant citation.
 """
 import re
 import unicodedata
+import copy
+import threading
+import time
 from urllib.parse import urlparse
 
 from ddgs import DDGS
@@ -142,15 +145,43 @@ def search_web(query: str, max_results: int = 8):
     return cleaned[:max(1, min(int(max_results), 10))]
 
 
+# Cache mémoire court : évite de répéter les mêmes appels lors des reruns Streamlit.
+_BIBLIO_CACHE = {}
+_BIBLIO_CACHE_LOCK = threading.Lock()
+_BIBLIO_CACHE_TTL = 6 * 60 * 60  # 6 heures
+_BIBLIO_CACHE_MAX = 64
+
+
 def search_bibliography(topic: str, max_results: int = 8):
-    """Recherche des références et conserve leurs métadonnées vérifiables."""
-    import requests
+    """Recherche avec cache mémoire et protection contre les limites temporaires."""
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
 
     topic = (topic or "").strip()
+    limit = max(1, min(int(max_results), 10))
+    cache_key = (_normalise(topic), limit)
+    now = time.time()
+    with _BIBLIO_CACHE_LOCK:
+        cached = _BIBLIO_CACHE.get(cache_key)
+        if cached and now - cached["time"] < _BIBLIO_CACHE_TTL:
+            return copy.deepcopy(cached["data"])
+        if cached:
+            _BIBLIO_CACHE.pop(cache_key, None)
+
+    retry_policy = Retry(
+        total=2, connect=2, read=2, status=2,
+        backoff_factor=1.5,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset(["GET"]),
+        respect_retry_after_header=True,
+        raise_on_status=False,
+    )
+    session = requests.Session()
+    session.mount("https://", HTTPAdapter(max_retries=retry_policy))
+    session.mount("http://", HTTPAdapter(max_retries=retry_policy))
+
     if len(topic) < 3:
         raise ValueError("Saisissez un thème de recherche d'au moins 3 caractères.")
-    limit = max(1, min(int(max_results), 10))
-    headers = {"User-Agent": "CORRECTGLOSS/1.1 (academic reference discovery)"}
     output = {
         "Articles scientifiques": [], "Livres": [],
         "Auteurs et chercheurs": [], "Documents, mémoires et thèses": [],
@@ -258,7 +289,7 @@ def search_bibliography(topic: str, max_results: int = 8):
     # OpenAlex : catalogue ouvert de publications et de chercheurs.
     for search_term in queries[:2]:
         try:
-            response = requests.get(
+            response = session.get(
                 "https://api.openalex.org/works",
                 params={"search": search_term, "per-page": min(limit * 2, 20),
                         "select": "id,doi,display_name,publication_year,type,authorships,primary_location,abstract_inverted_index"},
@@ -292,7 +323,7 @@ def search_bibliography(topic: str, max_results: int = 8):
 
     # Crossref : DOI, auteurs et date de publication.
     try:
-        response = requests.get(
+        response = session.get(
             "https://api.crossref.org/works",
             params={"query.bibliographic": topic, "rows": min(limit * 3, 30)},
             headers=headers, timeout=18,
@@ -327,7 +358,7 @@ def search_bibliography(topic: str, max_results: int = 8):
     google_queries = queries[:2]
     for search_term in google_queries:
         try:
-            response = requests.get(
+            response = session.get(
                 "https://www.googleapis.com/books/v1/volumes",
                 params={"q": search_term, "maxResults": min(limit, 8),
                         "orderBy": "relevance", "printType": "books"},
@@ -361,7 +392,7 @@ def search_bibliography(topic: str, max_results: int = 8):
     # Open Library : interroger plusieurs formulations, puis dédoublonner les notices.
     for search_term in queries[:3]:
         try:
-            response = requests.get(
+            response = session.get(
                 "https://openlibrary.org/search.json",
                 params={"q": search_term, "limit": min(limit * 2, 20),
                         "fields": "title,author_name,first_publish_year,key,subject,ia,has_fulltext,public_scan,edition_key,cover_i"},
@@ -402,4 +433,9 @@ def search_bibliography(topic: str, max_results: int = 8):
         "Certaines bases n'ont pas répondu : " + "; ".join(errors)
         if errors else "Recherche terminée. Vérifiez chaque notice auprès de sa source."
     )
+    with _BIBLIO_CACHE_LOCK:
+        if len(_BIBLIO_CACHE) >= _BIBLIO_CACHE_MAX:
+            oldest_key = min(_BIBLIO_CACHE, key=lambda key: _BIBLIO_CACHE[key]["time"])
+            _BIBLIO_CACHE.pop(oldest_key, None)
+        _BIBLIO_CACHE[cache_key] = {"time": time.time(), "data": copy.deepcopy(output)}
     return output
