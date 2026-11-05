@@ -258,10 +258,10 @@ def cg_build_writing_outline(subject, kind, level, lang, instructions, full_draf
         body_parts = []
         for prompt in prompts:
             body_parts.extend([prompt, fill])
-        lines.append((heading, "\\n".join(body_parts)))
+        lines.append((heading, "\n".join(body_parts)))
 
     if not full_draft:
-        lines.append((guide_title, "\\n".join(common_guides)))
+        lines.append((guide_title, "\n".join(common_guides)))
     return lines
 
 if writing_submit:
