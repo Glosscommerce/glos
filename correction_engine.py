@@ -102,7 +102,7 @@ def _choose_safe_replacement(full_text: str, offset: int, original: str, replace
 LOCAL_CORRECTION_RULES = (
     (r"(?i)(?<=Le commerce international )constituent\\b",
      "constitue", "Accord sujet-verbe : sujet singulier."),
-    (r"(?i)\\bsera\\s+confronté\\b",
+    (r"(?i)(?<=Les résultats obtenus )sera\\s+confronté\\b",
      "seront confrontés", "Accord avec le sujet pluriel « les résultats »."),
     (r"(?i)(?<=La recherche )reposent\\b",
      "repose", "Accord sujet-verbe : sujet singulier."),
