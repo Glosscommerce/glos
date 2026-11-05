@@ -138,5 +138,46 @@ class CorrectionEngineTests(unittest.TestCase):
         mocked_sleep.assert_called_once_with(1)
 
 
+    @patch("correction_engine.requests.post", return_value=FakeResponse([]))
+    def test_applies_high_confidence_local_french_fixes_in_docx(self, mocked_post):
+        document = Document()
+        cases = [
+            ("Le commerce international ", "constituent",
+             "Le commerce international constitue"),
+            ("Les résultats obtenus ", "sera confronté",
+             "Les résultats obtenus seront confrontés"),
+            ("La recherche ", "reposent",
+             "La recherche repose"),
+            ("La région ", "Analanjirofod",
+             "La région Analanjirofo"),
+            ("s l'Ellon ", "données de la base WITS",
+             "Selon les données de la base WITS"),
+            ("Les ", "variablesreposeerche",
+             "Les variables de recherche"),
+        ]
+
+        for first, second, _ in cases:
+            paragraph = document.add_paragraph()
+            paragraph.add_run(first)
+            paragraph.add_run(second)
+
+        # A similar but different subject must not be changed by the targeted
+        # plural-agreement rule.
+        document.add_paragraph("Il sera confronté à plusieurs difficultés.")
+
+        corrected, changes, skipped, detected, suggestions = (
+            correct_docx_with_languagetool(document, "fr")
+        )
+
+        actual = [p.text for p in corrected.paragraphs]
+        expected = [item[2] for item in cases]
+        self.assertEqual(actual[:len(expected)], expected)
+        self.assertEqual(actual[-1], "Il sera confronté à plusieurs difficultés.")
+        self.assertEqual(len(changes), 6)
+        self.assertEqual(detected, 6)
+        self.assertEqual(skipped, [])
+        self.assertGreaterEqual(mocked_post.call_count, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
