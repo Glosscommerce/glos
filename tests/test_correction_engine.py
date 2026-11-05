@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from docx import Document
-from correction_engine import correct_docx_with_languagetool, _chunks, _post_languagetool
+from correction_engine import (\n    correct_docx_with_languagetool, analyze_document_structure,\n    _chunks, _post_languagetool,\n)
 
 
 class FakeResponse:
@@ -78,6 +78,40 @@ class CorrectionEngineTests(unittest.TestCase):
         self.assertEqual(detected, 2)
         self.assertEqual(mocked_post.call_count, 3)
 
+
+    def test_structure_diagnostics_detect_known_artifacts_without_editing(self):
+        document = Document()
+        document.add_paragraph("variablesreposeerche")
+        document.add_paragraph("Analanjirofod")
+        document.add_paragraph("Data+1")
+        document.add_paragraph("Les Publications du Cirad+1")
+        document.add_paragraph("ECOLEX")
+
+        before = [paragraph.text for paragraph in document.paragraphs]
+        report = analyze_document_structure(document)
+        after = [paragraph.text for paragraph in document.paragraphs]
+
+        flagged = {item["Élément"].casefold() for item in report["suspicious_artefacts"]}
+        self.assertIn("variablesreposeerche", flagged)
+        self.assertIn("analanjirofod", flagged)
+        self.assertIn("data+1", flagged)
+        self.assertIn("les publications du cirad", flagged)
+        self.assertIn("ecolex", flagged)
+        self.assertEqual(before, after)
+        self.assertTrue(all("Action" in item for item in report["suspicious_artefacts"]))
+
+    def test_structure_diagnostics_reports_repeated_paragraphs(self):
+        document = Document()
+        repeated = "Cette phrase académique suffisamment longue doit être signalée si elle apparaît deux fois."
+        document.add_paragraph(repeated)
+        document.add_paragraph("Un paragraphe différent.")
+        document.add_paragraph(repeated)
+
+        report = analyze_document_structure(document)
+
+        self.assertEqual(len(report["repeated_paragraphs"]), 1)
+        self.assertEqual(report["repeated_paragraphs"][0]["Occurrences"], 2)
+        self.assertIn("aucune suppression automatique", report["repeated_paragraphs"][0]["Action"].lower())
 
     def test_long_paragraph_is_split_without_losing_offsets(self):
         document = Document()
