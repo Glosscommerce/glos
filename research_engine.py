@@ -9,6 +9,7 @@ import unicodedata
 import copy
 import threading
 import time
+import requests
 from urllib.parse import urlparse
 
 from ddgs import DDGS
