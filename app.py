@@ -343,7 +343,7 @@ def show_research_page():
             if item.get("doi"):
                 doi_value = str(item["doi"]).replace("https://doi.org/", "").strip()
                 doi_status = item.get("doi_status", "non vérifié")
-                if doi_value and re.match(r"^10\\.\\d{4,9}/\\S+$", doi_value):
+                if doi_value and re.match(r"^10\.\d{4,9}/\S+$", doi_value):
                     st.markdown(f"DOI : [ouvrir la publication](https://doi.org/{quote_plus(doi_value, safe='/()')}) — **{doi_status}**")
                 else:
                     st.caption("DOI indiqué par le catalogue : format à vérifier.")
