@@ -2,7 +2,10 @@ import unittest
 from unittest.mock import patch
 
 from docx import Document
-from correction_engine import (\n    correct_docx_with_languagetool, analyze_document_structure,\n    _chunks, _post_languagetool,\n)
+from correction_engine import (
+    correct_docx_with_languagetool, analyze_document_structure,
+    _chunks, _post_languagetool,
+)
 
 
 class FakeResponse:
