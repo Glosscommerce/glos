@@ -29,16 +29,16 @@ def _protected_spans(text: str):
     """Return offsets of protected names, acronyms, URLs, emails and citations."""
     spans = []
     for term in sorted(PROTECTED_TERMS, key=len, reverse=True):
-        pattern = re.compile(r"(?<!\\w)" + re.escape(term) + r"(?!\\w)", re.IGNORECASE)
+        pattern = re.compile(r"(?<!\w)" + re.escape(term) + r"(?!\w)", re.IGNORECASE)
         spans.extend((m.start(), m.end()) for m in pattern.finditer(text))
 
     # Protect technical acronyms and identifiers such as WITS, INSTAT, DOI and URLs.
     patterns = (
-        r"\\b[A-Z][A-Z0-9]{1,}(?:[-/][A-Z0-9]+)*\\b",
-        r"https?://\\S+|www\\.\\S+",
-        r"\\b[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}\\b",
-        r"\\b(?:doi\\s*:\\s*)?10\\.\\d{4,9}/\\S+",
-        r"\\b[A-Z][a-zÀ-ÿ'-]+(?:\\s+[A-Z][a-zÀ-ÿ'-]+){1,3}\\s*\\(\\s*\\d{4}\\s*\\)",
+        r"\b[A-Z][A-Z0-9]{1,}(?:[-/][A-Z0-9]+)*\b",
+        r"https?://\S+|www\.\S+",
+        r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b",
+        r"\b(?:doi\s*:\s*)?10\.\d{4,9}/\S+",
+        r"\b[A-Z][a-zÀ-ÿ'-]+(?:\s+[A-Z][a-zÀ-ÿ'-]+){1,3}\s*\(\s*\d{4}\s*\)",
     )
     for expression in patterns:
         spans.extend((m.start(), m.end()) for m in re.finditer(expression, text))
