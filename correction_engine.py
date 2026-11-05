@@ -151,15 +151,15 @@ def analyze_document_structure(document):
     paragraphs = list(_document_paragraphs(document))
 
     suspicious_patterns = (
-        (r"\\b[A-Za-zÀ-ÿ]+\\+\\d+\\b", "Marqueur technique ou artefact (ex. Data+1)."),
-        (r"\\b(?:L\\d+\\s+)?Rapport\\s+final\\b", "Élément de version ou titre répété à vérifier."),
-        (r"\\b[A-Za-zÀ-ÿ]{8,}(?:recherche|variables|données)[A-Za-zÀ-ÿ]{4,}\\b", "Mots possiblement fusionnés."),
+        (r"\b[A-Za-zÀ-ÿ]+\+\d+\b", "Marqueur technique ou artefact (ex. Data+1)."),
+        (r"\b(?:L\d+\s+)?Rapport\s+final\b", "Élément de version ou titre répété à vérifier."),
+        (r"\b[A-Za-zÀ-ÿ]{8,}(?:recherche|variables|données)[A-Za-zÀ-ÿ]{4,}\b", "Mots possiblement fusionnés."),
     )
 
     for index, paragraph in enumerate(paragraphs, start=1):
         raw = paragraph.text or ""
         normalized = unicodedata.normalize("NFKC", raw)
-        normalized = re.sub(r"\\s+", " ", normalized).strip().casefold()
+        normalized = re.sub(r"\s+", " ", normalized).strip().casefold()
         if len(normalized) >= 50:
             occurrences[normalized].append((index, raw[:180]))
         for pattern, reason in suspicious_patterns:
