@@ -69,7 +69,7 @@ def add_word_toc(document):
     title.alignment = 1  # centered
     for title_run in title.runs:
         title_run.bold = True
-        title_run.font.size = __import__("docx").shared.Pt(14)
+        title_run.font.size = Pt(14)
     field_paragraph = document.add_paragraph()
     run = field_paragraph.add_run()
     begin = OxmlElement("w:fldChar")
