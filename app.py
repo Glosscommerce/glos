@@ -31,17 +31,38 @@ if "cg_session_logged" not in st.session_state:
     st.session_state["cg_session_logged"] = True
 
 def add_word_toc(document):
-    """Insert a real Word TOC field without a visible placeholder."""
+    """Replace a clearly labelled initial manual TOC with a real Word TOC field."""
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
 
-    # Avoid adding a second dynamic table when the source already has one.
+    paragraphs = list(document.paragraphs)
     if any("TOC" in paragraph._p.xml and "instrText" in paragraph._p.xml
-           for paragraph in document.paragraphs):
+           for paragraph in paragraphs):
         return document
 
-    paragraph = document.add_paragraph()
-    run = paragraph.add_run()
+    # Remove only an initial section explicitly titled "Table des matières",
+    # and only when a clear project-body heading marks where the contents end.
+    toc_index = next(
+        (i for i, p in enumerate(paragraphs)
+         if p.text.strip().casefold() in ("table des matières", "table des matieres", "sommaire")),
+        None,
+    )
+    if toc_index is not None:
+        body_index = next(
+            (i for i in range(toc_index + 1, min(len(paragraphs), toc_index + 250))
+             if paragraphs[i].text.strip().upper().startswith("PROJET DE RECHERCHE")),
+            None,
+        )
+        if body_index is not None:
+            for paragraph in paragraphs[toc_index:body_index]:
+                parent = paragraph._p.getparent()
+                if parent is not None:
+                    parent.remove(paragraph._p)
+
+    title = document.add_paragraph("TABLE DES MATIÈRES")
+    title.style = "Title"
+    field_paragraph = document.add_paragraph()
+    run = field_paragraph.add_run()
     begin = OxmlElement("w:fldChar")
     begin.set(qn("w:fldCharType"), "begin")
     instruction = OxmlElement("w:instrText")
@@ -55,8 +76,10 @@ def add_word_toc(document):
         run._r.append(element)
 
     body = document._element.body
-    body.remove(paragraph._p)
-    body.insert(0, paragraph._p)
+    body.remove(title._p)
+    body.remove(field_paragraph._p)
+    body.insert(0, title._p)
+    body.insert(1, field_paragraph._p)
 
     settings = document.settings._element
     update_fields = settings.find(qn("w:updateFields"))
