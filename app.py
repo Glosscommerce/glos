@@ -262,9 +262,8 @@ def show_research_page():
             authors = item.get("authors") or []
             if category == "Auteurs et chercheurs":
                 author_name = item.get("name") or title
-                author_url = "https://scholar.google.com/scholar?q=" + quote_plus(author_name)
                 publications = item.get("publications") or []
-                with st.expander(f"👤 {author_name} — {len(publications)} publication(s) trouvée(s)"):
+                with st.expander(f"📂 Voir dans CORRECTGLOSS — {author_name} ({len(publications)} publication(s))"):
                     if publications:
                         for pub_index, publication in enumerate(publications, start=1):
                             st.markdown(f"**{pub_index}. {publication.get('title', 'Titre indisponible')}**")
@@ -275,17 +274,18 @@ def show_research_page():
                                 meta.append(publication["category"])
                             if publication.get("provider"):
                                 meta.append("Catalogue : " + publication["provider"])
+                            if publication.get("type"):
+                                meta.append("Type : " + str(publication["type"]))
                             if meta:
                                 st.caption(" • ".join(meta))
                             publication_url = (publication.get("url") or "").strip()
                             if publication_url.startswith(("https://", "http://")):
-                                st.markdown(f"[Ouvrir la source originale]({publication_url})")
+                                st.markdown(f"[Consulter la notice originale]({publication_url})")
                             if publication.get("doi"):
                                 doi_value = str(publication["doi"]).replace("https://doi.org/", "").strip()
                                 st.markdown(f"[Consulter le DOI](https://doi.org/{doi_value})")
                     else:
-                        st.info("Aucune publication liée à cet auteur n'a été récupérée dans cette recherche.")
-                    st.markdown(f"[Voir aussi son profil de publications dans Google Scholar]({author_url})")
+                        st.info("Aucune publication liée à cet auteur n'a été récupérée dans cette recherche. Relancez la recherche avec un thème plus précis.")
             elif category == "Livres":
                 st.markdown(f"- **{title}**")
                 st.button(
