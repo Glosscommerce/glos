@@ -17,8 +17,9 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import (
     BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, PageBreak,
-    Table as PdfTable, TableStyle, TableOfContents,
+    Table as PdfTable, TableStyle,
 )
+from reportlab.platypus.tableofcontents import TableOfContents
 
 
 def add_page_numbers(document):
@@ -71,6 +72,15 @@ def _heading_level(paragraph):
         return 0
     return None
 
+
+
+def apply_academic_heading_styles(document):
+    """Apply Word Heading 1-3 styles to recognisable academic section titles."""
+    for paragraph in document.paragraphs:
+        level = _heading_level(paragraph)
+        if level is not None:
+            paragraph.style = f"Heading {level + 1}"
+    return document
 
 def _is_toc_field(paragraph):
     xml = paragraph._p.xml
