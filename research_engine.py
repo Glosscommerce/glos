@@ -60,6 +60,32 @@ def _relevance(topic, title="", snippet="", url=""):
                + overlap * 0.25 + academic_bonus + context_bonus)
 
 
+def _verify_reference_link(url, doi=None):
+    """Vérifie la résolution du DOI ou l'accessibilité HTTP de la notice."""
+    import requests
+    target = ("https://doi.org/" + str(doi).replace("https://doi.org/", "").strip()
+              if doi else str(url or "").strip())
+    if not target.startswith(("https://", "http://")):
+        return "non vérifié"
+    try:
+        response = requests.head(
+            target, allow_redirects=True,
+            headers={"User-Agent": "CORRECTGLOSS/1.2 (reference link check)"},
+            timeout=7,
+        )
+        if response.status_code < 400:
+            return "accessible"
+        # Certains dépôts refusent HEAD mais acceptent GET.
+        response = requests.get(
+            target, allow_redirects=True, stream=True,
+            headers={"User-Agent": "CORRECTGLOSS/1.2 (reference link check)"},
+            timeout=7,
+        )
+        return "accessible" if response.status_code < 400 else "à vérifier"
+    except requests.RequestException:
+        return "à vérifier"
+
+
 def _openalex_abstract(inverted_index):
     """Reconstruit le résumé OpenAlex à partir de son index de positions."""
     if not isinstance(inverted_index, dict):
@@ -145,6 +171,13 @@ def search_bibliography(topic: str, max_results: int = 8):
         clove_topic = bool(topic_terms & {"girofle", "clove", "cloves"})
         clove_words = {"girofle", "clove", "cloves", "syzygium", "aromaticum"}
         clove_match = bool(title_body & clove_words)
+        topic_norm = _normalise(topic)
+        title_norm = _normalise(title)
+        # Si le sujet porte explicitement sur Madagascar, ne pas confondre
+        # les études indonésiennes ou d'autres pays avec le cas malgache.
+        madagascar_topic = "madagascar" in topic_norm or "malgache" in topic_norm
+        madagascar_match = any(term in (title_norm + " " + _normalise(abstract or ""))
+                               for term in ("madagascar", "malgache", "malagasy"))
         # Écarter les travaux consacrés à une autre filière (litchi, vanille,
         # raphia...) même s'ils parlent aussi d'exportation et de qualité.
         other_crop_words = {
@@ -160,6 +193,18 @@ def search_bibliography(topic: str, max_results: int = 8):
         figurative_match = bool(title_body & figurative_terms)
         if clove_topic and (other_crop_only or not clove_match or figurative_match):
             return
+        if clove_topic and madagascar_topic and not madagascar_match:
+            return
+        # Pour un mémoire qualité/exportation, exiger au moins un axe
+        # directement visible dans le titre ou le résumé.
+        topic_axes = topic_terms & {
+            "qualite", "quality", "export", "exportation", "competitivite",
+            "competitiveness", "marche", "market", "filiere", "value", "chain"
+        }
+        if clove_topic and topic_axes:
+            axis_terms = _terms(title + " " + (abstract or ""))
+            if not (topic_axes & axis_terms) and score < 0.35:
+                return
         # Seuil relevé pour limiter les résultats faiblement liés au sujet.
         if score < 0.20:
             return
@@ -175,10 +220,13 @@ def search_bibliography(topic: str, max_results: int = 8):
             details.append("Type : " + str(work_type))
         if abstract:
             details.append("Résumé : " + re.sub(r"\s+", " ", str(abstract))[:650])
+        doi_status = _verify_reference_link(url, doi) if doi else "absent"
+        source_status = _verify_reference_link(url) if not doi else doi_status
         reference = {
             "title": title[:300], "year": year, "authors": author_list,
             "url": url, "type": work_type or "publication",
             "provider": provider, "relevance": round(score, 2), "doi": doi,
+            "doi_status": doi_status, "source_status": source_status,
             "snippet": " | ".join(details),
         }
         output[category].append(reference)
