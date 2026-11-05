@@ -218,8 +218,6 @@ def cg_build_writing_outline(subject, kind, level, lang, instructions, full_draf
     ]
     if instructions.strip():
         lines.append((t["instructions"], instructions.strip()))
-    if full_draft:
-        lines.append((t["intro"], t["fill"]))
     for heading, body in sections:
         lines.append((heading, body))
     if not full_draft:
@@ -249,7 +247,15 @@ if writing_submit:
             prepared_text_parts.extend([heading, body])
         prepared_buffer = io.BytesIO()
         prepared_doc.save(prepared_buffer)
-        st.session_state["cg_prepared_writing_docx"] = prepared_buffer.getvalue()
+        prepared_docx_bytes = prepared_buffer.getvalue()
+        st.session_state["cg_prepared_writing_docx"] = prepared_docx_bytes
+        try:
+            st.session_state["cg_prepared_writing_pdf"] = build_pdf_from_docx(
+                prepared_docx_bytes, font="Times New Roman", font_size=12,
+                line_spacing="1.5", margin_cm=2.5,
+            )
+        except Exception:
+            st.session_state.pop("cg_prepared_writing_pdf", None)
         st.session_state["cg_prepared_writing_text"] = "\n\n".join(prepared_text_parts)
         st.session_state["cg_prepared_writing_name"] = re.sub(
             r"[^A-Za-z0-9_-]+", "_", writing_subject.strip()
@@ -261,12 +267,20 @@ if writing_submit:
         st.info("Version gratuite : CORRECTGLOSS prépare une structure et des indications. Il n'invente pas de données, de citations ou de références bibliographiques.")
 
 if "cg_prepared_writing_docx" in st.session_state:
+    writing_filename = st.session_state.get("cg_prepared_writing_name", "redaction")
     st.download_button(
         "Télécharger la rédaction préparée (Word)",
         st.session_state["cg_prepared_writing_docx"],
-        file_name=f"correctgloss_{st.session_state.get('cg_prepared_writing_name', 'redaction')}.docx",
+        file_name=f"correctgloss_{writing_filename}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+    if "cg_prepared_writing_pdf" in st.session_state:
+        st.download_button(
+            "Télécharger la rédaction préparée (PDF)",
+            st.session_state["cg_prepared_writing_pdf"],
+            file_name=f"correctgloss_{writing_filename}.pdf",
+            mime="application/pdf",
+        )
     with st.expander("Afficher le contenu préparé"):
         st.text_area("Contenu", st.session_state["cg_prepared_writing_text"], height=300)
 
