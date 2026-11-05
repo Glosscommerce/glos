@@ -135,81 +135,116 @@ with st.form("cg_prepare_writing_form"):
     writing_submit = st.form_submit_button("Préparer ma rédaction", type="primary")
 
 def cg_build_writing_outline(subject, kind, level, lang, instructions, full_draft):
-    is_fr = lang == "Français"
-    labels = {
-        "fr": {
-            "intro": "INTRODUCTION",
-            "context": "Contexte et justification du sujet",
-            "problem": "Problématique",
-            "questions": "Questions de recherche / objectifs",
-            "plan": "Annonce du plan",
-            "development": "DÉVELOPPEMENT",
-            "part1": "I. Première partie : notions, définitions et cadre général",
-            "part2": "II. Deuxième partie : analyse, arguments et exemples",
-            "part3": "III. Troisième partie : résultats, discussion ou propositions",
-            "conclusion": "CONCLUSION",
-            "summary": "Synthèse des idées principales",
-            "answer": "Réponse à la problématique",
-            "limits": "Limites et perspectives",
-            "sources": "SOURCES ET RÉFÉRENCES",
-            "source_note": "Insérez uniquement les ouvrages, articles, rapports et sites réellement consultés.",
-            "fill": "[À compléter avec vos informations, vos données et vos sources vérifiées.]",
-            "guide": "Questions pour vous guider",
-            "g1": "Quel est le contexte du sujet et pourquoi est-il important ?",
-            "g2": "Quel problème précis voulez-vous étudier ou expliquer ?",
-            "g3": "Quels faits, données ou exemples vérifiables soutiennent votre analyse ?",
-            "g4": "Que montrent vos résultats et quelles conclusions pouvez-vous en tirer ?",
-            "instructions": "Consignes fournies",
-        },
-        "en": {
-            "intro": "INTRODUCTION",
-            "context": "Background and rationale",
-            "problem": "Problem statement",
-            "questions": "Research questions / objectives",
-            "plan": "Outline of the paper",
-            "development": "MAIN BODY",
-            "part1": "I. Part One: concepts, definitions and general framework",
-            "part2": "II. Part Two: analysis, arguments and examples",
-            "part3": "III. Part Three: findings, discussion or recommendations",
-            "conclusion": "CONCLUSION",
-            "summary": "Summary of the main ideas",
-            "answer": "Answer to the problem statement",
-            "limits": "Limitations and future perspectives",
-            "sources": "SOURCES AND REFERENCES",
-            "source_note": "Include only books, articles, reports and websites you actually consulted.",
-            "fill": "[Complete with your own information, data and verified sources.]",
-            "guide": "Guiding questions",
-            "g1": "What is the context of the topic, and why does it matter?",
-            "g2": "What specific issue do you want to study or explain?",
-            "g3": "Which verifiable facts, data or examples support your analysis?",
-            "g4": "What do your findings show, and what conclusions can you draw?",
-            "instructions": "Your instructions",
-        },
-    }
-    t = labels["fr" if is_fr else "en"]
-    if kind == "Lettre":
-        sections = [
-            ("[Lieu et date]", t["fill"]),
-            ("[Destinataire]", t["fill"]),
-            ("Objet : " + subject, t["fill"]),
-            (t["intro"], t["fill"]),
-            ("Développement", t["fill"]),
-            ("Formule de politesse et signature", t["fill"]),
+    """Build a free, editable writing framework; never invent facts or references."""
+    fr = lang == "Français"
+    fill = (
+        "[À compléter avec vos idées, vos informations et vos sources vérifiées.]"
+        if fr else
+        "[Complete with your own ideas, information and verified sources.]"
+    )
+    if fr:
+        common_guides = [
+            "Quel est le contexte du sujet et pourquoi est-il important ?",
+            "Quel problème précis voulez-vous étudier ou expliquer ?",
+            "Quels arguments, données ou exemples vérifiables pouvez-vous présenter ?",
+            "Que retenez-vous de votre analyse et quelles sont ses limites ?",
         ]
-    elif kind == "Article":
-        sections = [
-            (t["intro"], t["context"] + "\n" + t["fill"]),
-            (t["development"], t["part1"] + "\n" + t["fill"] + "\n\n" + t["part2"] + "\n" + t["fill"]),
-            (t["conclusion"], t["summary"] + "\n" + t["fill"]),
-            (t["sources"], t["source_note"]),
-        ]
+        sections_by_kind = {
+            "Dissertation": [
+                ("INTRODUCTION", ["Accroche et présentation du sujet", "Définition des termes essentiels", "Délimitation du sujet", "Problématique", "Annonce du plan"]),
+                ("DÉVELOPPEMENT", ["I. Premier axe : première idée et arguments", "II. Deuxième axe : analyse et exemples", "III. Troisième axe : discussion ou ouverture (si nécessaire)"]),
+                ("CONCLUSION", ["Bilan des arguments", "Réponse claire à la problématique", "Ouverture (facultative)"]),
+                ("SOURCES ET RÉFÉRENCES", ["Indiquez uniquement les sources réellement consultées."]),
+            ],
+            "Exposé": [
+                ("INTRODUCTION", ["Présentation du thème", "Contexte et intérêt", "Objectif de l’exposé", "Annonce des parties"]),
+                ("DÉVELOPPEMENT", ["I. Présentation des notions essentielles", "II. Explications, arguments et exemples", "III. Résultats ou points à retenir"]),
+                ("CONCLUSION", ["Résumé des idées essentielles", "Conclusion générale", "Question d’ouverture (facultative)"]),
+                ("SOURCES", ["Livres, articles, rapports et sites réellement consultés."]),
+            ],
+            "Rapport": [
+                ("INTRODUCTION", ["Présentation de l’organisme ou du contexte", "Contexte et justification du rapport", "Objectifs du rapport", "Annonce du plan"]),
+                ("MÉTHODOLOGIE", ["Période et lieu", "Méthodes de collecte des informations", "Outils utilisés et limites"]),
+                ("ACTIVITÉS ET OBSERVATIONS", ["Activités réalisées", "Description des méthodes", "Difficultés rencontrées et solutions"]),
+                ("RÉSULTATS ET DISCUSSION", ["Résultats observés", "Analyse des résultats", "Limites et enseignements"]),
+                ("CONCLUSION ET RECOMMANDATIONS", ["Bilan", "Recommandations réalistes", "Perspectives"]),
+                ("SOURCES ET ANNEXES", ["Sources réellement consultées et documents annexés avec autorisation."]),
+            ],
+            "Mémoire / Projet de recherche": [
+                ("INTRODUCTION GÉNÉRALE", ["Contexte et justification du sujet", "Présentation du sujet et délimitation", "Problématique", "Questions de recherche", "Hypothèses (si pertinentes)", "Objectif général et objectifs spécifiques", "Annonce du plan"]),
+                ("PARTIE I — CADRE CONCEPTUEL ET THÉORIQUE", ["Définitions des concepts clés", "Théories et travaux antérieurs", "Présentation du terrain ou du secteur étudié"]),
+                ("PARTIE II — CADRE MÉTHODOLOGIQUE", ["Type de recherche et approche", "Population, échantillon et terrain", "Techniques de collecte des données", "Méthodes d’analyse et limites"]),
+                ("PARTIE III — RÉSULTATS, ANALYSE ET DISCUSSION", ["Présentation des résultats réels", "Analyse en lien avec les objectifs", "Discussion des hypothèses", "Suggestions ou recommandations"]),
+                ("CONCLUSION GÉNÉRALE", ["Synthèse", "Réponse à la problématique", "Limites de l’étude", "Perspectives"]),
+                ("BIBLIOGRAPHIE ET ANNEXES", ["Références vérifiables selon les normes demandées par l’établissement."]),
+            ],
+            "Lettre": [
+                ("EN-TÊTE", ["Lieu et date", "Coordonnées de l’expéditeur", "Coordonnées du destinataire"]),
+                ("OBJET", ["Objet précis de la lettre"]),
+                ("CORPS DE LA LETTRE", ["Formule d’appel", "Motif et contexte", "Demande ou message principal", "Informations utiles et pièces jointes"]),
+                ("FORMULE FINALE", ["Formule de politesse adaptée", "Signature et nom"]),
+            ],
+            "Article": [
+                ("TITRE ET CHAPÔ", ["Titre précis", "Résumé bref de l’idée principale"]),
+                ("INTRODUCTION", ["Présentation du sujet", "Angle choisi et objectif"]),
+                ("DÉVELOPPEMENT", ["I. Première idée et éléments vérifiables", "II. Analyse, exemples ou témoignages autorisés", "III. Enjeux et perspectives"]),
+                ("CONCLUSION", ["Idée essentielle à retenir", "Ouverture éventuelle"]),
+                ("SOURCES", ["Sources réellement consultées et vérifiables."]),
+            ],
+        }
+        guide_title = "QUESTIONS POUR VOUS GUIDER"
     else:
-        sections = [
-            (t["intro"], t["context"] + "\n" + t["fill"] + "\n\n" + t["problem"] + "\n" + t["fill"] + "\n\n" + t["questions"] + "\n" + t["fill"] + "\n\n" + t["plan"] + "\n" + t["fill"]),
-            (t["development"], t["part1"] + "\n" + t["fill"] + "\n\n" + t["part2"] + "\n" + t["fill"] + "\n\n" + t["part3"] + "\n" + t["fill"]),
-            (t["conclusion"], t["summary"] + "\n" + t["fill"] + "\n\n" + t["answer"] + "\n" + t["fill"] + "\n\n" + t["limits"] + "\n" + t["fill"]),
-            (t["sources"], t["source_note"]),
+        common_guides = [
+            "What is the context of the topic, and why is it important?",
+            "What specific problem do you want to study or explain?",
+            "Which verifiable arguments, data or examples can you present?",
+            "What does your analysis show, and what are its limitations?",
         ]
+        sections_by_kind = {
+            "Dissertation": [
+                ("INTRODUCTION", ["Opening and presentation of the topic", "Definition of key terms", "Scope of the topic", "Problem statement", "Outline of the paper"]),
+                ("MAIN BODY", ["I. First main point and supporting arguments", "II. Second main point, analysis and examples", "III. Further discussion or perspective (if needed)"]),
+                ("CONCLUSION", ["Summary of the arguments", "Clear answer to the problem statement", "Optional broader perspective"]),
+                ("SOURCES AND REFERENCES", ["List only sources you actually consulted."]),
+            ],
+            "Exposé": [
+                ("INTRODUCTION", ["Presentation of the topic", "Background and relevance", "Purpose of the presentation", "Outline"]),
+                ("MAIN BODY", ["I. Key concepts", "II. Explanations, arguments and examples", "III. Findings or key points"]),
+                ("CONCLUSION", ["Summary of the main ideas", "Final conclusion", "Optional opening question"]),
+                ("SOURCES", ["Books, articles, reports and websites actually consulted."]),
+            ],
+            "Rapport": [
+                ("INTRODUCTION", ["Organization or context", "Background and rationale", "Report objectives", "Outline"]),
+                ("METHODOLOGY", ["Period and location", "Information-gathering methods", "Tools used and limitations"]),
+                ("ACTIVITIES AND OBSERVATIONS", ["Activities completed", "Methods observed", "Difficulties and solutions"]),
+                ("FINDINGS AND DISCUSSION", ["Actual findings", "Analysis", "Limitations and lessons learned"]),
+                ("CONCLUSION AND RECOMMENDATIONS", ["Overall assessment", "Practical recommendations", "Future perspectives"]),
+                ("SOURCES AND APPENDICES", ["Sources actually consulted and authorized appendices."]),
+            ],
+            "Mémoire / Projet de recherche": [
+                ("GENERAL INTRODUCTION", ["Background and rationale", "Topic and scope", "Problem statement", "Research questions", "Hypotheses (if relevant)", "General and specific objectives", "Outline"]),
+                ("PART I — CONCEPTUAL AND THEORETICAL FRAMEWORK", ["Key concept definitions", "Theories and previous studies", "Research field or sector"]),
+                ("PART II — METHODOLOGICAL FRAMEWORK", ["Research design and approach", "Population, sample and field", "Data collection methods", "Analysis methods and limitations"]),
+                ("PART III — FINDINGS, ANALYSIS AND DISCUSSION", ["Actual findings", "Analysis linked to objectives", "Discussion of hypotheses", "Recommendations"]),
+                ("GENERAL CONCLUSION", ["Summary", "Answer to the problem statement", "Study limitations", "Future perspectives"]),
+                ("REFERENCES AND APPENDICES", ["Verifiable references using the institution's required style."]),
+            ],
+            "Lettre": [
+                ("HEADER", ["Place and date", "Sender's details", "Recipient's details"]),
+                ("SUBJECT", ["Clear subject line"]),
+                ("BODY", ["Appropriate greeting", "Reason and context", "Main request or message", "Relevant details and attachments"]),
+                ("CLOSING", ["Appropriate closing", "Signature and name"]),
+            ],
+            "Article": [
+                ("TITLE AND SUMMARY", ["Specific title", "Brief statement of the main idea"]),
+                ("INTRODUCTION", ["Topic presentation", "Chosen angle and purpose"]),
+                ("MAIN BODY", ["I. First idea and verifiable evidence", "II. Analysis, examples or authorized testimony", "III. Issues and perspectives"]),
+                ("CONCLUSION", ["Main takeaway", "Optional perspective"]),
+                ("SOURCES", ["Sources actually consulted and verifiable."]),
+            ],
+        }
+
+    sections = sections_by_kind.get(kind, sections_by_kind["Dissertation"])
     lines = [
         ("TITLE", subject),
         ("Type", kind),
@@ -217,13 +252,16 @@ def cg_build_writing_outline(subject, kind, level, lang, instructions, full_draf
         ("Language", lang),
     ]
     if instructions.strip():
-        lines.append((t["instructions"], instructions.strip()))
-    for heading, body in sections:
-        lines.append((heading, body))
+        lines.append(("Consignes particulières" if fr else "Special instructions", instructions.strip()))
+
+    for heading, prompts in sections:
+        body_parts = []
+        for prompt in prompts:
+            body_parts.extend([prompt, fill])
+        lines.append((heading, "\\n".join(body_parts)))
+
     if not full_draft:
-        lines.extend([
-            (t["guide"], "\n".join([t["g1"], t["g2"], t["g3"], t["g4"]])),
-        ])
+        lines.append((guide_title, "\\n".join(common_guides)))
     return lines
 
 if writing_submit:
