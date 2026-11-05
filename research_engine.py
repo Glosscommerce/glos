@@ -131,6 +131,7 @@ def search_bibliography(topic: str, max_results: int = 8):
     }
     seen = set()
     errors = []
+    openalex_rate_limited = False
 
     def add_reference(category, title, year=None, authors=None, url=None,
                       provider="", doi=None, abstract=None, work_type=None):
@@ -189,7 +190,7 @@ def search_bibliography(topic: str, max_results: int = 8):
     # les mêmes mots que le sujet exact du mémoire.
     queries = _topic_queries(topic)
     # OpenAlex : catalogue ouvert de publications et de chercheurs.
-    for search_term in queries[:3]:
+    for search_term in queries[:2]:
         try:
             response = requests.get(
                 "https://api.openalex.org/works",
@@ -197,6 +198,10 @@ def search_bibliography(topic: str, max_results: int = 8):
                         "select": "id,doi,display_name,publication_year,type,authorships,primary_location,abstract_inverted_index"},
                 headers=headers, timeout=18,
             )
+            if response.status_code == 429:
+                openalex_rate_limited = True
+                errors.append("OpenAlex : limite temporaire de requêtes (HTTP 429). Les autres bases continuent.")
+                break
             response.raise_for_status()
             for work in response.json().get("results", []):
                 title = work.get("display_name") or ""
@@ -311,57 +316,8 @@ def search_bibliography(topic: str, max_results: int = 8):
             errors.append("Open Library : " + str(exc)[:180])
             break
 
-    # Mémoires et thèses : utiliser directement OpenAlex plutôt que DDGS.
-    # DDGS peut appeler un service de suggestions Wikipedia (wt.wikipedia.org),
-    # ce qui provoque parfois un DNSError sans rapport avec OpenAlex/Crossref.
-    try:
-        response = requests.get(
-            "https://api.openalex.org/works",
-            params={
-                "search": topic,
-                "filter": "type:dissertation",
-                "per-page": min(limit * 4, 40),
-                "select": "id,doi,display_name,publication_year,type,authorships,primary_location,abstract_inverted_index",
-            },
-            headers=headers, timeout=18,
-        )
-        response.raise_for_status()
-        for work in response.json().get("results", []):
-            title = work.get("display_name") or ""
-            authors = [(a.get("author") or {}).get("display_name")
-                       for a in work.get("authorships", [])[:6]]
-            location = work.get("primary_location") or {}
-            url = location.get("landing_page_url") or work.get("doi") or work.get("id")
-            abstract = _openalex_abstract(work.get("abstract_inverted_index"))
-            score = _relevance(topic, title, abstract, url or "")
-            title_body = _terms(title + " " + abstract)
-            clove_topic = bool(_terms(topic) & {"girofle", "clove", "cloves"})
-            clove_words = {"girofle", "clove", "cloves", "syzygium", "aromaticum"}
-            clove_match = bool(title_body & clove_words)
-            other_crop_words = {"litchi", "lychee", "vanille", "vanilla", "raphia",
-                                "cacao", "cocoa", "cafe", "coffee", "poivre", "pepper"}
-            other_crop_only = bool(title_body & other_crop_words) and not bool(
-                _terms(title) & clove_words
-            )
-            if not url or score < 0.20 or (clove_topic and (not clove_match or other_crop_only)):
-                continue
-            key = ("Documents, mémoires et thèses", _normalise(title))
-            if key in seen:
-                continue
-            seen.add(key)
-            output["Documents, mémoires et thèses"].append({
-                "title": title[:300],
-                "year": work.get("publication_year"),
-                "authors": [a for a in authors if a][:6],
-                "url": url,
-                "snippet": abstract[:700],
-                "provider": "OpenAlex",
-                "relevance": round(score, 2),
-                "doi": work.get("doi"),
-                "type": work.get("type") or "dissertation",
-            })
-    except (requests.RequestException, ValueError, TypeError) as exc:
-        errors.append("Recherche de documents (OpenAlex) : " + str(exc)[:180])
+    # Les mémoires et thèses sont déjà classés dans la recherche OpenAlex générale.
+    # Éviter un appel OpenAlex supplémentaire qui augmente le risque de HTTP 429.
 
     for category in ("Articles scientifiques", "Livres", "Documents, mémoires et thèses"):
         output[category].sort(key=lambda x: x.get("relevance", 0), reverse=True)
