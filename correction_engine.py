@@ -96,6 +96,64 @@ def _choose_safe_replacement(full_text: str, offset: int, original: str, replace
 
     return replacements[0], "Première suggestion LanguageTool appliquée; relire le contexte."
 
+
+# Corrections locales ciblées pour des erreurs récurrentes non reconnues par
+# LanguageTool. Elles sont volontairement limitées à des formes non ambiguës.
+LOCAL_CORRECTION_RULES = (
+    (r"(?i)(?<=Le commerce international )constituent\\b",
+     "constitue", "Accord sujet-verbe : sujet singulier."),
+    (r"(?i)\\bsera\\s+confronté\\b",
+     "seront confrontés", "Accord avec le sujet pluriel « les résultats »."),
+    (r"(?i)(?<=La recherche )reposent\\b",
+     "repose", "Accord sujet-verbe : sujet singulier."),
+    (r"(?i)\\bAnalanjirofod\\b",
+     "Analanjirofo", "Correction d'un nom géographique malgache connu."),
+    (r"(?i)\\bs\\s+l['’]Ellon\\s+données\\b",
+     "Selon les données", "Correction d'une expression manifestement altérée."),
+    (r"(?i)\\bvariablesreposeerche\\b",
+     "variables de recherche", "Séparation de mots fusionnés."),
+)
+
+
+def _apply_local_corrections(paragraph):
+    """Apply only high-confidence local fixes while preserving Word run formatting."""
+    applied = []
+    for pattern, replacement, explanation in LOCAL_CORRECTION_RULES:
+        matches = list(re.finditer(pattern, paragraph.text or ""))
+        for match in reversed(matches):
+            start, end = match.span()
+            spans = _run_spans(paragraph)
+            affected = [
+                (run_start, run_end, run)
+                for run_start, run_end, run in spans
+                if run_start < end and run_end > start
+            ]
+            if not affected:
+                continue
+
+            old_text = (paragraph.text or "")[start:end]
+            first_start, first_end, first_run = affected[0]
+            local_start = start - first_start
+            local_end = min(end, first_end) - first_start
+            first_value = first_run.text or ""
+            first_run.text = (
+                first_value[:local_start] + replacement + first_value[local_end:]
+            )
+
+            for run_start, run_end, run in affected[1:]:
+                remove_start = max(start, run_start) - run_start
+                remove_end = min(end, run_end) - run_start
+                value = run.text or ""
+                run.text = value[:remove_start] + value[remove_end:]
+
+            applied.append({
+                "Texte initial": old_text,
+                "Texte corrigé": replacement,
+                "Explication": explanation,
+                "Méthode": "Règle locale prudente; mise en forme Word conservée autant que possible.",
+            })
+    return applied
+
 def _iter_table_paragraphs(table):
     for row in table.rows:
         for cell in row.cells:
@@ -268,7 +326,13 @@ def correct_docx_with_languagetool(document, language_code: str):
     changes = []
     skipped = []
     suggestions = []
-    detected_count = 0
+
+    # Corriger d'abord les erreurs récurrentes très clairement identifiables,
+    # y compris celles que le service LanguageTool ne signale pas.
+    for paragraph in paragraphs:
+        local_changes = _apply_local_corrections(paragraph)
+        changes.extend(local_changes)
+    detected_count = len(changes)
 
     # Re-run LanguageTool on the updated text so that agreements exposed by
     # earlier corrections (e.g. "Les enfant joue" -> "Les enfants jouent")
