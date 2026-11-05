@@ -122,8 +122,29 @@ def search_web(query: str, max_results: int = 8):
     if len(query) > 300:
         raise ValueError("Le sujet est trop long (300 caractères maximum).")
 
-    raw = DDGS().text(query, region="wt-wt", safesearch="moderate",
-                      max_results=max(10, min(int(max_results) * 3, 30)))
+    # Plusieurs moteurs de recherche sont essayés : une panne DuckDuckGo
+    # ne doit pas interrompre toute la recherche Internet.
+    raw = []
+    backend_errors = []
+    requested_results = max(10, min(int(max_results) * 3, 30))
+    for backend in ("duckduckgo", "bing", "brave"):
+        try:
+            raw = list(DDGS(timeout=8).text(
+                query,
+                region="wt-wt",
+                safesearch="moderate",
+                max_results=requested_results,
+                backend=backend,
+            ) or [])
+            if raw:
+                break
+        except Exception as exc:
+            backend_errors.append(f"{backend}: {str(exc)[:160]}")
+    if not raw and backend_errors:
+        raise RuntimeError(
+            "Les moteurs de recherche sont temporairement indisponibles. "
+            + " | ".join(backend_errors)
+        )
     cleaned, seen = [], set()
     for item in raw or []:
         url = (item.get("href") or "").strip()
