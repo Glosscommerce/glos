@@ -31,28 +31,39 @@ if "cg_session_logged" not in st.session_state:
     st.session_state["cg_session_logged"] = True
 
 def add_word_toc(document):
+    """Insert a real Word TOC field without a visible placeholder."""
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
-    p = document.add_paragraph()
-    run = p.add_run()
+
+    # Avoid adding a second dynamic table when the source already has one.
+    if any("TOC" in paragraph._p.xml and "instrText" in paragraph._p.xml
+           for paragraph in document.paragraphs):
+        return document
+
+    paragraph = document.add_paragraph()
+    run = paragraph.add_run()
     begin = OxmlElement("w:fldChar")
     begin.set(qn("w:fldCharType"), "begin")
-    instr = OxmlElement("w:instrText")
-    instr.set(qn("xml:space"), "preserve")
-    instr.text = ' TOC \\o "1-3" \\h \\z \\u '
+    instruction = OxmlElement("w:instrText")
+    instruction.set(qn("xml:space"), "preserve")
+    instruction.text = ' TOC \\o "1-3" \\h \\z \\u '
     separate = OxmlElement("w:fldChar")
     separate.set(qn("w:fldCharType"), "separate")
-    text_run = OxmlElement("w:r")
-    text_node = OxmlElement("w:t")
-    text_node.text = "Ouvrez dans Word puis mettez à jour la table."
-    text_run.append(text_node)
     end = OxmlElement("w:fldChar")
     end.set(qn("w:fldCharType"), "end")
-    run._r.append(begin); run._r.append(instr); run._r.append(separate)
-    p._p.append(text_run); run._r.append(end)
+    for element in (begin, instruction, separate, end):
+        run._r.append(element)
+
     body = document._element.body
-    body.remove(p._p)
-    body.insert(0, p._p)
+    body.remove(paragraph._p)
+    body.insert(0, paragraph._p)
+
+    settings = document.settings._element
+    update_fields = settings.find(qn("w:updateFields"))
+    if update_fields is None:
+        update_fields = OxmlElement("w:updateFields")
+        settings.append(update_fields)
+    update_fields.set(qn("w:val"), "true")
     return document
 
 
