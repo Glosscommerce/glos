@@ -5,7 +5,7 @@ from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import requests
-from correction_engine import correct_docx_with_languagetool
+from correction_engine import correct_docx_with_languagetool, analyze_document_structure
 from export_engine import add_page_numbers, build_pdf_from_docx
 
 APP_NAME = "Mémoire Correcteur Pro"
@@ -81,6 +81,24 @@ except Exception as e:
 paragraphs = [p.text for p in doc.paragraphs]
 text = "\n\n".join(p for p in paragraphs if p.strip())
 st.success(f"Document chargé : {len(paragraphs)} paragraphes • {len(doc.tables)} tableaux")
+
+structure_report = analyze_document_structure(doc)
+with st.expander("Contrôle de la structure du document", expanded=True):
+    st.caption("Ce contrôle signale les répétitions et artefacts possibles. Il ne supprime et ne modifie aucun contenu.")
+    st.metric("Paragraphes examinés", structure_report["paragraph_count"])
+    repeated = structure_report["repeated_paragraphs"]
+    artefacts = structure_report["suspicious_artefacts"]
+    if repeated:
+        st.warning(f"{len(repeated)} groupe(s) de paragraphes répétés à vérifier.")
+        st.dataframe(repeated, use_container_width=True, hide_index=True)
+    else:
+        st.success("Aucun paragraphe long identique détecté.")
+    if artefacts:
+        st.warning(f"{len(artefacts)} élément(s) pouvant être des artefacts de copie ou de génération.")
+        st.dataframe(artefacts, use_container_width=True, hide_index=True)
+    else:
+        st.info("Aucun artefact correspondant aux règles de détection n'a été repéré.")
+
 st.text_area("Aperçu", "\n\n".join([p for p in paragraphs if p.strip()][:8]), height=220)
 
 with st.expander("Correction manuelle du texte", expanded=False):
