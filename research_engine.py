@@ -131,7 +131,6 @@ def search_bibliography(topic: str, max_results: int = 8):
     }
     seen = set()
     errors = []
-    openalex_rate_limited = False
 
     def add_reference(category, title, year=None, authors=None, url=None,
                       provider="", doi=None, abstract=None, work_type=None):
@@ -155,7 +154,11 @@ def search_bibliography(topic: str, max_results: int = 8):
         other_crop_only = bool(title_body & other_crop_words) and not bool(
             _terms(title) & clove_words
         )
-        if clove_topic and (other_crop_only or not clove_match):
+        # Écarter les faux positifs où « clous de girofle » est une expression
+        # figurée sans rapport avec la filière agricole (ex. gaullisme).
+        figurative_terms = {"gaullisme", "gaulliste"}
+        figurative_match = bool(title_body & figurative_terms)
+        if clove_topic and (other_crop_only or not clove_match or figurative_match):
             return
         # Seuil relevé pour limiter les résultats faiblement liés au sujet.
         if score < 0.20:
@@ -172,18 +175,33 @@ def search_bibliography(topic: str, max_results: int = 8):
             details.append("Type : " + str(work_type))
         if abstract:
             details.append("Résumé : " + re.sub(r"\s+", " ", str(abstract))[:650])
-        output[category].append({
+        reference = {
             "title": title[:300], "year": year, "authors": author_list,
             "url": url, "type": work_type or "publication",
             "provider": provider, "relevance": round(score, 2), "doi": doi,
             "snippet": " | ".join(details),
-        })
+        }
+        output[category].append(reference)
         for author in author_list:
             author_key = _normalise(author)
-            if author_key and not any(_normalise(x["name"]) == author_key
-                                      for x in output["Auteurs et chercheurs"]):
-                output["Auteurs et chercheurs"].append({
+            if not author_key:
+                continue
+            author_entry = next(
+                (x for x in output["Auteurs et chercheurs"]
+                 if _normalise(x["name"]) == author_key), None
+            )
+            if author_entry is None:
+                author_entry = {
                     "name": author, "url": url, "provider": provider,
+                    "publications": [],
+                }
+                output["Auteurs et chercheurs"].append(author_entry)
+            if not any(_normalise(pub.get("title")) == _normalise(title)
+                       for pub in author_entry["publications"]):
+                author_entry["publications"].append({
+                    "title": reference["title"], "year": year,
+                    "category": category, "url": url, "doi": doi,
+                    "provider": provider, "type": work_type or "publication",
                 })
 
     # Requêtes courtes complémentaires : le titre d'un livre n'emploie pas toujours
@@ -199,7 +217,6 @@ def search_bibliography(topic: str, max_results: int = 8):
                 headers=headers, timeout=18,
             )
             if response.status_code == 429:
-                openalex_rate_limited = True
                 errors.append("OpenAlex : limite temporaire de requêtes (HTTP 429). Les autres bases continuent.")
                 break
             response.raise_for_status()
