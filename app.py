@@ -6,7 +6,7 @@ from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import requests
 from correction_engine import correct_docx_with_languagetool, analyze_document_structure
-from export_engine import add_page_numbers, build_pdf_from_docx
+from export_engine import add_page_numbers, apply_academic_heading_styles, build_pdf_from_docx
 
 APP_NAME = "Mémoire Correcteur Pro"
 st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
@@ -276,6 +276,7 @@ if st.button("Préparer les fichiers Word et PDF", type="primary"):
         for run in para.runs:
             run.font.name = font
             run.font.size = Pt(int(font_size))
+    apply_academic_heading_styles(formatted)
     add_page_numbers(formatted)
     formatted = add_word_toc(formatted)
     word_output = io.BytesIO()
