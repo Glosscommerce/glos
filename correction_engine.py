@@ -100,17 +100,17 @@ def _choose_safe_replacement(full_text: str, offset: int, original: str, replace
 # Corrections locales ciblées pour des erreurs récurrentes non reconnues par
 # LanguageTool. Elles sont volontairement limitées à des formes non ambiguës.
 LOCAL_CORRECTION_RULES = (
-    (r"(?i)(?<=Le commerce international )constituent\\b",
+    (r"(?i)(?<=Le commerce international )constituent\b",
      "constitue", "Accord sujet-verbe : sujet singulier."),
-    (r"(?i)(?<=Les résultats obtenus )sera\\s+confronté\\b",
+    (r"(?i)(?<=Les résultats obtenus )sera\s+confronté\b",
      "seront confrontés", "Accord avec le sujet pluriel « les résultats »."),
-    (r"(?i)(?<=La recherche )reposent\\b",
+    (r"(?i)(?<=La recherche )reposent\b",
      "repose", "Accord sujet-verbe : sujet singulier."),
-    (r"(?i)\\bAnalanjirofod\\b",
+    (r"(?i)\bAnalanjirofod\b",
      "Analanjirofo", "Correction d'un nom géographique malgache connu."),
-    (r"(?i)\\bs\\s+l['’]Ellon\\s+données\\b",
+    (r"(?i)\bs\s+l['’]Ellon\s+données\b",
      "Selon les données", "Correction d'une expression manifestement altérée."),
-    (r"(?i)\\bvariablesreposeerche\\b",
+    (r"(?i)\bvariablesreposeerche\b",
      "variables de recherche", "Séparation de mots fusionnés."),
 )
 
