@@ -252,6 +252,18 @@ def show_research_page():
             if preview_link and preview_link.startswith(("https://", "http://")):
                 st.markdown(f"[Consulter la fiche/aperçu disponible]({preview_link})")
 
+    # Repérer les publications communes à plusieurs auteurs affichés.
+    # On privilégie le DOI, puis l'URL ; le titre sert de solution de repli.
+    publication_authors = {}
+    for author_item in bibliography.get("Auteurs et chercheurs", []):
+        author_label = (author_item.get("name") or "").strip()
+        for pub in author_item.get("publications", []):
+            identity = (str(pub.get("doi") or "").strip().lower()
+                        or str(pub.get("url") or "").strip().lower()
+                        or re.sub(r"\\s+", " ", str(pub.get("title") or "")).strip().casefold())
+            if identity and author_label:
+                publication_authors.setdefault(identity, set()).add(author_label)
+
     for category in ["Auteurs et chercheurs", "Livres", "Articles scientifiques", "Documents, mémoires et thèses"]:
         entries = bibliography.get(category, [])
         st.markdown(f"**{category} ({len(entries)})**")
@@ -278,6 +290,15 @@ def show_research_page():
                                 meta.append("Type : " + str(publication["type"]))
                             if meta:
                                 st.caption(" • ".join(meta))
+                            identity = (str(publication.get("doi") or "").strip().lower()
+                                        or str(publication.get("url") or "").strip().lower()
+                                        or re.sub(r"\\s+", " ", str(publication.get("title") or "")).strip().casefold())
+                            coauthors = sorted(publication_authors.get(identity, set()))
+                            if len(coauthors) > 1:
+                                st.info(
+                                    f"Publication commune — {len(coauthors)} coauteurs détectés : "
+                                    + ", ".join(coauthors)
+                                )
                             publication_url = (publication.get("url") or "").strip()
                             if publication_url.startswith(("https://", "http://")):
                                 st.markdown(f"[Consulter la notice originale]({publication_url})")
