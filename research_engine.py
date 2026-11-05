@@ -433,9 +433,16 @@ def search_bibliography(topic: str, max_results: int = 8):
         "Certaines bases n'ont pas répondu : " + "; ".join(errors)
         if errors else "Recherche terminée. Vérifiez chaque notice auprès de sa source."
     )
-    with _BIBLIO_CACHE_LOCK:
-        if len(_BIBLIO_CACHE) >= _BIBLIO_CACHE_MAX:
-            oldest_key = min(_BIBLIO_CACHE, key=lambda key: _BIBLIO_CACHE[key]["time"])
-            _BIBLIO_CACHE.pop(oldest_key, None)
-        _BIBLIO_CACHE[cache_key] = {"time": time.time(), "data": copy.deepcopy(output)}
+    # Ne jamais mettre en cache une réponse dégradée par une limite API :
+    # une nouvelle recherche pourra retenter OpenAlex au lieu de répéter l'ancien 429.
+    has_temporary_provider_error = any(
+        "HTTP 429" in str(error) or "HTTP 5" in str(error)
+        for error in errors
+    )
+    if not has_temporary_provider_error:
+        with _BIBLIO_CACHE_LOCK:
+            if len(_BIBLIO_CACHE) >= _BIBLIO_CACHE_MAX:
+                oldest_key = min(_BIBLIO_CACHE, key=lambda key: _BIBLIO_CACHE[key]["time"])
+                _BIBLIO_CACHE.pop(oldest_key, None)
+            _BIBLIO_CACHE[cache_key] = {"time": time.time(), "data": copy.deepcopy(output)}
     return output
