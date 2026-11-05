@@ -206,6 +206,17 @@ def show_research_page():
         if book_author:
             st.caption("Auteur(s) : " + book_author)
 
+        # Toujours proposer une fiche externe : l'intégration iframe peut être bloquée
+        # par Google Books, Internet Archive ou le navigateur.
+        if source_url and source_url.startswith(("https://", "http://")):
+            st.markdown(f"[Ouvrir la notice originale dans un nouvel onglet]({source_url})")
+        if google_books_id:
+            google_books_url = f"https://books.google.com/books?id={quote_plus(str(google_books_id))}"
+            st.markdown(f"[Ouvrir la fiche Google Books]({google_books_url})")
+        if archive_id := next(iter(archive_ids or []), None):
+            archive_url = f"https://archive.org/details/{quote_plus(str(archive_id))}"
+            st.markdown(f"[Ouvrir la fiche Internet Archive]({archive_url})")
+
         # Open Library / Internet Archive : intégrer le lecteur lorsqu'un scan est disponible.
         archive_id = next(iter(archive_ids or []), None)
         if archive_id:
@@ -332,7 +343,12 @@ def show_research_page():
             if item.get("doi"):
                 doi_value = str(item["doi"]).replace("https://doi.org/", "").strip()
                 doi_status = item.get("doi_status", "non vérifié")
-                st.markdown(f"DOI : [ouvrir la publication](https://doi.org/{doi_value}) — **{doi_status}**")
+                if doi_value and re.match(r"^10\\.\\d{4,9}/\\S+$", doi_value):
+                    st.markdown(f"DOI : [ouvrir la publication](https://doi.org/{quote_plus(doi_value, safe='/()')}) — **{doi_status}**")
+                else:
+                    st.caption("DOI indiqué par le catalogue : format à vérifier.")
+                    search_url = "https://search.crossref.org/?q=" + quote_plus(title)
+                    st.markdown(f"[Rechercher cette référence dans Crossref]({search_url})")
             elif item.get("source_status"):
                 st.caption("Lien de la notice : " + str(item.get("source_status")))
             if item.get("relevance") is not None:
