@@ -109,6 +109,167 @@ with st.sidebar:
     margin_cm = st.number_input("Marges (cm)", 1.5, 4.0, 2.5, 0.25)
     justify = st.checkbox("Justifier le texte", True)
 
+
+st.divider()
+st.header("📝 Préparer une rédaction")
+st.caption("Préparez un plan ou un brouillon structuré. Cette fonction fonctionne sans API payante.")
+with st.form("cg_prepare_writing_form"):
+    writing_mode = st.radio(
+        "Que souhaitez-vous préparer ?",
+        ["Rédaction complète (brouillon à compléter)", "Plan détaillé et accompagnement"],
+        help="La rédaction complète crée une trame structurée avec des zones à compléter. Le plan détaillé vous guide étape par étape."
+    )
+    writing_subject = st.text_input("Sujet / thème", placeholder="Ex. : La compétitivité du girofle malgache à l'exportation")
+    writing_type = st.selectbox(
+        "Type de rédaction",
+        ["Dissertation", "Exposé", "Rapport", "Mémoire / Projet de recherche", "Lettre", "Article"],
+    )
+    writing_level = st.selectbox(
+        "Niveau", ["Collège", "Lycée", "Licence", "Master", "Professionnel"]
+    )
+    writing_language = st.selectbox("Langue de rédaction", ["Français", "Anglais"])
+    writing_instructions = st.text_area(
+        "Consignes particulières (facultatif)",
+        placeholder="Ex. : parler du contexte malgache, citer des exemples, préciser la période étudiée..."
+    )
+    writing_submit = st.form_submit_button("Préparer ma rédaction", type="primary")
+
+def cg_build_writing_outline(subject, kind, level, lang, instructions, full_draft):
+    is_fr = lang == "Français"
+    labels = {
+        "fr": {
+            "intro": "INTRODUCTION",
+            "context": "Contexte et justification du sujet",
+            "problem": "Problématique",
+            "questions": "Questions de recherche / objectifs",
+            "plan": "Annonce du plan",
+            "development": "DÉVELOPPEMENT",
+            "part1": "I. Première partie : notions, définitions et cadre général",
+            "part2": "II. Deuxième partie : analyse, arguments et exemples",
+            "part3": "III. Troisième partie : résultats, discussion ou propositions",
+            "conclusion": "CONCLUSION",
+            "summary": "Synthèse des idées principales",
+            "answer": "Réponse à la problématique",
+            "limits": "Limites et perspectives",
+            "sources": "SOURCES ET RÉFÉRENCES",
+            "source_note": "Insérez uniquement les ouvrages, articles, rapports et sites réellement consultés.",
+            "fill": "[À compléter avec vos informations, vos données et vos sources vérifiées.]",
+            "guide": "Questions pour vous guider",
+            "g1": "Quel est le contexte du sujet et pourquoi est-il important ?",
+            "g2": "Quel problème précis voulez-vous étudier ou expliquer ?",
+            "g3": "Quels faits, données ou exemples vérifiables soutiennent votre analyse ?",
+            "g4": "Que montrent vos résultats et quelles conclusions pouvez-vous en tirer ?",
+            "instructions": "Consignes fournies",
+        },
+        "en": {
+            "intro": "INTRODUCTION",
+            "context": "Background and rationale",
+            "problem": "Problem statement",
+            "questions": "Research questions / objectives",
+            "plan": "Outline of the paper",
+            "development": "MAIN BODY",
+            "part1": "I. Part One: concepts, definitions and general framework",
+            "part2": "II. Part Two: analysis, arguments and examples",
+            "part3": "III. Part Three: findings, discussion or recommendations",
+            "conclusion": "CONCLUSION",
+            "summary": "Summary of the main ideas",
+            "answer": "Answer to the problem statement",
+            "limits": "Limitations and future perspectives",
+            "sources": "SOURCES AND REFERENCES",
+            "source_note": "Include only books, articles, reports and websites you actually consulted.",
+            "fill": "[Complete with your own information, data and verified sources.]",
+            "guide": "Guiding questions",
+            "g1": "What is the context of the topic, and why does it matter?",
+            "g2": "What specific issue do you want to study or explain?",
+            "g3": "Which verifiable facts, data or examples support your analysis?",
+            "g4": "What do your findings show, and what conclusions can you draw?",
+            "instructions": "Your instructions",
+        },
+    }
+    t = labels["fr" if is_fr else "en"]
+    if kind == "Lettre":
+        sections = [
+            ("[Lieu et date]", t["fill"]),
+            ("[Destinataire]", t["fill"]),
+            ("Objet : " + subject, t["fill"]),
+            (t["intro"], t["fill"]),
+            ("Développement", t["fill"]),
+            ("Formule de politesse et signature", t["fill"]),
+        ]
+    elif kind == "Article":
+        sections = [
+            (t["intro"], t["context"] + "\n" + t["fill"]),
+            (t["development"], t["part1"] + "\n" + t["fill"] + "\n\n" + t["part2"] + "\n" + t["fill"]),
+            (t["conclusion"], t["summary"] + "\n" + t["fill"]),
+            (t["sources"], t["source_note"]),
+        ]
+    else:
+        sections = [
+            (t["intro"], t["context"] + "\n" + t["fill"] + "\n\n" + t["problem"] + "\n" + t["fill"] + "\n\n" + t["questions"] + "\n" + t["fill"] + "\n\n" + t["plan"] + "\n" + t["fill"]),
+            (t["development"], t["part1"] + "\n" + t["fill"] + "\n\n" + t["part2"] + "\n" + t["fill"] + "\n\n" + t["part3"] + "\n" + t["fill"]),
+            (t["conclusion"], t["summary"] + "\n" + t["fill"] + "\n\n" + t["answer"] + "\n" + t["fill"] + "\n\n" + t["limits"] + "\n" + t["fill"]),
+            (t["sources"], t["source_note"]),
+        ]
+    lines = [
+        ("TITLE", subject),
+        ("Type", kind),
+        ("Level", level),
+        ("Language", lang),
+    ]
+    if instructions.strip():
+        lines.append((t["instructions"], instructions.strip()))
+    if full_draft:
+        lines.append((t["intro"], t["fill"]))
+    for heading, body in sections:
+        lines.append((heading, body))
+    if not full_draft:
+        lines.extend([
+            (t["guide"], "\n".join([t["g1"], t["g2"], t["g3"], t["g4"]])),
+        ])
+    return lines
+
+if writing_submit:
+    if not writing_subject.strip():
+        st.error("Veuillez saisir le sujet de votre rédaction.")
+    else:
+        prepared_lines = cg_build_writing_outline(
+            writing_subject.strip(), writing_type, writing_level, writing_language,
+            writing_instructions, writing_mode.startswith("Rédaction complète")
+        )
+        prepared_doc = Document()
+        prepared_doc.add_heading(writing_subject.strip(), 0)
+        prepared_doc.add_paragraph(
+            f"Type : {writing_type} | Niveau : {writing_level} | Langue : {writing_language}"
+        )
+        prepared_text_parts = [writing_subject.strip()]
+        for heading, body in prepared_lines[4:]:
+            prepared_doc.add_heading(heading, level=1)
+            for paragraph_text in body.split("\n"):
+                prepared_doc.add_paragraph(paragraph_text)
+            prepared_text_parts.extend([heading, body])
+        prepared_buffer = io.BytesIO()
+        prepared_doc.save(prepared_buffer)
+        st.session_state["cg_prepared_writing_docx"] = prepared_buffer.getvalue()
+        st.session_state["cg_prepared_writing_text"] = "\n\n".join(prepared_text_parts)
+        st.session_state["cg_prepared_writing_name"] = re.sub(
+            r"[^A-Za-z0-9_-]+", "_", writing_subject.strip()
+        )[:50] or "redaction"
+        st.success(
+            "Votre plan structuré est prêt." if writing_mode.startswith("Plan détaillé")
+            else "Votre brouillon structuré est prêt. Complétez les passages entre crochets avec vos propres informations et sources."
+        )
+        st.info("Version gratuite : CORRECTGLOSS prépare une structure et des indications. Il n'invente pas de données, de citations ou de références bibliographiques.")
+
+if "cg_prepared_writing_docx" in st.session_state:
+    st.download_button(
+        "Télécharger la rédaction préparée (Word)",
+        st.session_state["cg_prepared_writing_docx"],
+        file_name=f"correctgloss_{st.session_state.get('cg_prepared_writing_name', 'redaction')}.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    with st.expander("Afficher le contenu préparé"):
+        st.text_area("Contenu", st.session_state["cg_prepared_writing_text"], height=300)
+
 uploaded = st.file_uploader("Importer un mémoire Word (.docx)", type=["docx"])
 if not uploaded:
     st.info("Importez un document Word pour lancer les contrôles.")
