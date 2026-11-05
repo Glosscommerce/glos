@@ -179,5 +179,49 @@ class CorrectionEngineTests(unittest.TestCase):
         self.assertGreaterEqual(mocked_post.call_count, 1)
 
 
+
+    @patch("correction_engine.requests.post", return_value=FakeResponse([]))
+    def test_corrects_high_confidence_mictsl_examples(self, mocked_post):
+        document = Document()
+        document.add_paragraph("Le MICTSL et une société prive")
+        document.add_paragraph("mon visité d’entreprise")
+        document.add_paragraph("les équipements moderne")
+
+        corrected, changes, skipped, detected, suggestions = (
+            correct_docx_with_languagetool(document, "fr")
+        )
+
+        self.assertEqual(
+            [p.text for p in corrected.paragraphs],
+            [
+                "Le MICTSL est une société privée",
+                "ma visite d’entreprise",
+                "les équipements modernes",
+            ],
+        )
+        self.assertEqual(len(changes), 3)
+        self.assertEqual(skipped, [])
+
+    def test_mictsl_diagnostics_flag_corruption_and_conflicting_cover_titles(self):
+        document = Document()
+        document.add_paragraph("RAPPORT DE VISITE D’ENTREPRISE")
+        document.add_paragraph("MÉMOIRE DE LICENCE")
+        document.add_paragraph("Le MICTSL se spécialisé auspécialiseespécialiséecontainerisé")
+        document.add_paragraph("Les effets secondaires provoqué par provoquésshine")
+        document.add_paragraph("æ %ICTSL")
+        document.add_paragraph("I. I. INTRODUCTION")
+
+        before = [p.text for p in document.paragraphs]
+        report = analyze_document_structure(document)
+        after = [p.text for p in document.paragraphs]
+
+        flagged_text = " | ".join(item["Élément"] for item in report["suspicious_artefacts"])
+        self.assertIn("RAPPORT DE VISITE / MÉMOIRE DE LICENCE", flagged_text)
+        self.assertIn("æ", flagged_text)
+        self.assertIn("%ICTSL", flagged_text)
+        self.assertIn("I. I.", flagged_text)
+        self.assertEqual(before, after)
+        self.assertGreaterEqual(len(report["suspicious_artefacts"]), 5)
+
 if __name__ == "__main__":
     unittest.main()
