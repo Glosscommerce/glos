@@ -142,25 +142,18 @@ def build_pdf_from_docx(docx_bytes, font="Times New Roman", font_size=12,
     ]
 
     story_body, entries = [], []
-    skip_contents = False
     for kind, item in _body_blocks(source):
         if kind == "p":
             p = item
             value = _clean(p.text)
-            if not value or _is_toc_field(p):
+            style_name = (p.style.name if p.style else "").strip().lower()
+            if not value or _is_toc_field(p) or style_name.startswith("toc "):
                 continue
             if value.lower().startswith("ouvrez dans word puis mettez à jour"):
                 continue
             upper = value.upper()
             if upper in ("TABLE DES MATIÈRES", "TABLE DES MATIERES", "SOMMAIRE"):
-                skip_contents = True
                 continue
-            if skip_contents:
-                if (upper.startswith("PROJET DE RECHERCHE") or upper in
-                    ("RÉSUMÉ", "RESUME", "INTRODUCTION GÉNÉRALE", "INTRODUCTION GENERALE")):
-                    skip_contents = False
-                else:
-                    continue
 
             level = _heading_level(p)
             if level is not None:
