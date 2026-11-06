@@ -1,0 +1,253 @@
+"""Page de recherche documentaire gratuite de CORRECTGLOSS V2."""
+import io
+from urllib.parse import urlsplit, urlunsplit
+import streamlit as st
+from docx import Document
+from research_engine import search_web, search_bibliography
+from export_engine import build_pdf_from_docx
+
+
+def normalize_source_url(url):
+    """Corrige l'ancien hôte BAU qui échoue en DNS, sans modifier les autres sources."""
+    if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+        return url or ""
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+        if host == "biblio.univ-antananarivo.mg":
+            netloc = "www.biblio.univ-antananarivo.mg"
+            if parts.port:
+                netloc += f":{parts.port}"
+            return urlunsplit(("https", netloc, parts.path, parts.query, parts.fragment))
+    except Exception:
+        pass
+    return url
+
+st.title("🌐 Recherche & rédaction")
+st.caption("Recherche gratuite sur le Web et dans des catalogues bibliographiques publics. Aucun abonnement ni clé API payante requis.")
+st.info("CORRECTGLOSS classe les pistes documentaires par proximité avec le thème. Un lien accessible ne prouve pas que les auteurs, le résumé ou le contenu sont exacts : vérifiez toujours la notice originale avant toute citation.")
+
+query = st.text_input(
+    "Sujet de recherche",
+    placeholder="Ex. : La qualité du girofle malgache et sa compétitivité à l’exportation",
+    max_chars=300,
+)
+c1, c2 = st.columns(2)
+with c1:
+    max_results = st.selectbox("Nombre de résultats", [5, 8, 10], index=1)
+with c2:
+    language = st.selectbox("Langue de recherche Web", ["Français", "Anglais"])
+
+left, right = st.columns(2)
+with left:
+    if st.button("🔎 Rechercher sur Internet", type="primary", use_container_width=True):
+        if len(query.strip()) < 3:
+            st.warning("Saisissez un sujet d’au moins 3 caractères.")
+        else:
+            search_query = query.strip() if language == "Français" else query.strip() + " English"
+            try:
+                with st.spinner("Recherche Web en cours…"):
+                    st.session_state["cg_research_results"] = search_web(search_query, max_results=max_results)
+                st.session_state["cg_research_query"] = query.strip()
+                st.success("Recherche terminée.")
+            except Exception as exc:
+                st.error(f"Recherche indisponible : {exc}")
+with right:
+    if st.button("📚 Chercher auteurs, livres et travaux", use_container_width=True):
+        if len(query.strip()) < 3:
+            st.warning("Saisissez un sujet d’au moins 3 caractères.")
+        else:
+            try:
+                with st.spinner("Consultation des catalogues publics…"):
+                    st.session_state["cg_bibliography"] = search_bibliography(query.strip(), max_results=max_results)
+                st.session_state["cg_research_query"] = query.strip()
+                st.success("Recherche bibliographique terminée.")
+            except Exception as exc:
+                st.error(f"Recherche bibliographique indisponible : {exc}")
+
+results = st.session_state.get("cg_research_results", [])
+if results:
+    st.subheader(f"Résultats Web ({len(results)})")
+    for i, item in enumerate(results, 1):
+        st.markdown(f"**{i}. {item.get('title', 'Titre indisponible')}**")
+        source_url = (
+            item.get("final_url")
+            if item.get("link_status") in {"page", "pdf"} and item.get("final_url")
+            else item.get("url", "")
+        )
+        source_url = normalize_source_url(source_url)
+        if source_url.startswith(("https://", "http://")):
+            st.link_button("Ouvrir la source dans un nouvel onglet", source_url, key=f"web_source_{i}")
+        if item.get("snippet"):
+            st.write(item["snippet"])
+        st.caption(f"Pertinence indicative : {round(float(item.get('relevance', 0)) * 100)} %")
+        if item.get("link_label"):
+            st.caption("Vérification du lien : " + item["link_label"])
+        if item.get("link_detail"):
+            st.caption(item["link_detail"])
+        if item.get("final_url") and item.get("final_url") != item.get("url"):
+            st.caption("Adresse finale après redirection : " + item["final_url"])
+    st.warning("Un lien marqué « page accessible » ne signifie pas qu'un PDF est disponible. Même lorsqu'un PDF répond, CORRECTGLOSS ne peut pas confirmer automatiquement que son accès est gratuit ou que sa licence autorise sa réutilisation. Les liens bloqués par un serveur doivent être essayés dans votre navigateur.")
+
+bibliography = st.session_state.get("cg_bibliography", {})
+if bibliography:
+    st.divider()
+    st.subheader("Auteurs mentionnés et références bibliographiques")
+    st.info(bibliography.get("_message", "Résultats issus de catalogues publics."))
+    for diagnostic in bibliography.get("_diagnostics", []):
+        st.caption(diagnostic)
+
+    authors = bibliography.get("Auteurs et chercheurs", [])
+    with st.expander(f"Auteurs mentionnés dans les notices ({len(authors)})", expanded=bool(authors)):
+        if not authors:
+            st.caption("Aucun auteur identifié dans les notices retenues.")
+        for i, item in enumerate(authors, 1):
+            st.markdown(f"**{i}. {item.get('name', 'Auteur non renseigné')}**")
+            if item.get("publications"):
+                for pub in item["publications"]:
+                    pub_title = pub.get("title", "Publication sans titre")
+                    pub_url = pub.get("url", "")
+                    group = pub.get("relevance_group", "C")
+                    st.markdown(f"- **[{group}]** [{pub_title}]({pub_url})" if pub_url else f"- **[{group}]** {pub_title}")
+
+    current_topic = st.session_state.get("cg_research_query", query).lower()
+    if "tsaboraha" in current_topic or "tsboraha" in current_topic:
+        group_details = {
+            "A": ("A — Références directes", "Travaux qui mentionnent explicitement le Tsaboraha et les Betsimisaraka."),
+            "B": ("B — Références comparatives", "Travaux qui mentionnent le Tsaboraha, mais dont le lien spécifique avec les Betsimisaraka doit être confirmé."),
+            "C": ("C — Références connexes", "Travaux sur les rites, coutumes et traditions Betsimisaraka ; ils apportent un contexte culturel sans traiter nécessairement du Tsaboraha."),
+        }
+    elif any(term in current_topic for term in ("girofle", "clove", "cloves")):
+        group_details = {
+            "A": ("A — Références directes", "Girofle malgache avec des éléments explicites sur la qualité ET l’exportation/compétitivité."),
+            "B": ("B — Références sur le girofle", "Études sur le girofle ou la filière malgache, sans couvrir explicitement tous les axes du sujet."),
+            "C": ("C — Références contextuelles", "Sources utiles sur la qualité, les marchés ou l’exportation à Madagascar, sans mention explicite du girofle."),
+        }
+    else:
+        group_details = {
+            "A": ("A — Références directes", "Travaux correspondant directement aux termes distinctifs du sujet."),
+            "B": ("B — Références partiellement concordantes", "Plusieurs termes distinctifs correspondent ; vérifier le résumé et le document original."),
+            "C": ("C — Références contextuelles", "Correspondance limitée ; utiliser seulement comme contexte après vérification."),
+        }
+    reference_categories = ["Articles scientifiques", "Livres", "Documents, mémoires et thèses"]
+    for group in ("A", "B", "C"):
+        grouped_items = {
+            category: [item for item in bibliography.get(category, [])
+                       if item.get("relevance_group", "C") == group]
+            for category in reference_categories
+        }
+        total = sum(len(items) for items in grouped_items.values())
+        heading, explanation = group_details[group]
+        with st.expander(f"{heading} ({total})", expanded=(group == "A" and total > 0)):
+            st.caption(explanation)
+            if not total:
+                st.caption("Aucun résultat vérifié/pertinent dans cette catégorie pour le moment.")
+            for category, entries in grouped_items.items():
+                if entries:
+                    st.markdown(f"#### {category}")
+                for i, item in enumerate(entries, 1):
+                    st.markdown(f"**{i}. {item.get('title', 'Référence sans titre')}**")
+                    if item.get("authors"):
+                        st.caption("Auteur(s) : " + ", ".join(item["authors"]))
+                    meta = []
+                    if item.get("year"):
+                        meta.append(str(item["year"]))
+                    if item.get("provider"):
+                        meta.append("Catalogue : " + item["provider"])
+                    if item.get("doi"):
+                        meta.append("DOI : " + str(item["doi"]).replace("https://doi.org/", ""))
+                    if meta:
+                        st.caption(" • ".join(meta))
+                    source_url = (
+                        item.get("final_url")
+                        if item.get("link_status") in {"page", "pdf"} and item.get("final_url")
+                        else item.get("url", "")
+                    )
+                    source_url = normalize_source_url(source_url)
+                    if source_url.startswith(("https://", "http://")):
+                        st.link_button(
+                            "Consulter la notice originale",
+                            source_url,
+                            key=f"bib_{group}_{category}_{i}",
+                        )
+                    if item.get("link_label"):
+                        st.caption("Vérification du lien : " + str(item["link_label"]))
+                    if item.get("link_detail"):
+                        st.caption(item["link_detail"])
+                    if item.get("final_url") and item.get("final_url") != item.get("url"):
+                        st.caption("Adresse finale après redirection : " + str(item["final_url"]))
+                    if item.get("metadata_status"):
+                        st.warning(item["metadata_status"])
+                    if item.get("relevance_reason"):
+                        st.caption(item["relevance_reason"])
+                    if item.get("snippet"):
+                        st.write(item["snippet"])
+
+    st.warning("Le classement A/B/C mesure une proximité thématique indicative, pas la qualité scientifique ni la véracité du document. Les auteurs affichés sont ceux indiqués par les catalogues, pas des auteurs vérifiés par CORRECTGLOSS. Lisez la source originale et contrôlez chaque référence avant de la citer.")
+
+    if st.button("📥 Préparer la bibliographie Word et PDF"):
+        try:
+            doc = Document()
+            doc.add_heading("Bibliographie – CORRECTGLOSS", 0)
+            doc.add_paragraph("Sujet : " + st.session_state.get("cg_research_query", query))
+            export_groups = {
+                "A — Références directes": "A",
+                "B — Références partiellement concordantes": "B",
+                "C — Références contextuelles à vérifier": "C",
+            }
+            for group_title, group_code in export_groups.items():
+                doc.add_heading(group_title, level=1)
+                for category in ["Articles scientifiques", "Livres", "Documents, mémoires et thèses"]:
+                    entries = [item for item in bibliography.get(category, [])
+                               if item.get("relevance_group", "C") == group_code]
+                    if entries:
+                        doc.add_heading(category, level=2)
+                    for item in entries:
+                        p = doc.add_paragraph(style="List Number")
+                        p.add_run(item.get("title", "Référence sans titre")).bold = True
+                        details = []
+                        if item.get("authors"):
+                            details.append(", ".join(item["authors"]))
+                        if item.get("year"):
+                            details.append(str(item["year"]))
+                        if item.get("doi"):
+                            details.append("DOI : " + str(item["doi"]).replace("https://doi.org/", ""))
+                        if item.get("url"):
+                            details.append(item["url"])
+                        if item.get("metadata_status"):
+                            details.append(item["metadata_status"])
+                        if details:
+                            doc.add_paragraph(" — ".join(details))
+            buffer = io.BytesIO()
+            doc.save(buffer)
+            docx_bytes = buffer.getvalue()
+            st.session_state["cg_bibliography_docx"] = docx_bytes
+            try:
+                st.session_state["cg_bibliography_pdf"] = build_pdf_from_docx(
+                    docx_bytes, font="Times New Roman", font_size=12,
+                    line_spacing="1.5", margin_cm=2.5,
+                )
+                st.session_state.pop("cg_bibliography_pdf_error", None)
+            except Exception as pdf_exc:
+                st.session_state.pop("cg_bibliography_pdf", None)
+                st.session_state["cg_bibliography_pdf_error"] = str(pdf_exc)
+            st.success("Bibliographie Word préparée.")
+        except Exception as exc:
+            st.error(f"Erreur de préparation : {exc}")
+
+if st.session_state.get("cg_bibliography_docx"):
+    d1, d2 = st.columns(2)
+    with d1:
+        st.download_button(
+            "Télécharger Word", st.session_state["cg_bibliography_docx"],
+            file_name="correctgloss_bibliographie.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    with d2:
+        if st.session_state.get("cg_bibliography_pdf"):
+            st.download_button(
+                "Télécharger PDF", st.session_state["cg_bibliography_pdf"],
+                file_name="correctgloss_bibliographie.pdf", mime="application/pdf",
+            )
+        elif st.session_state.get("cg_bibliography_pdf_error"):
+            st.caption("Conversion PDF indisponible : " + st.session_state["cg_bibliography_pdf_error"])
