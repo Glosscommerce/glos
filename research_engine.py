@@ -355,6 +355,14 @@ def search_bibliography(topic: str, max_results: int = 8):
                     relevance_group = "B"
                     relevance_reason = "Étude sur le girofle à l'international ; utile pour comparaison."
             else:
+                # Écarter les notices dont le titre porte clairement sur une autre
+                # culture (litchi, vanille, cacao...), même si elles parlent aussi
+                # de qualité, d'exportation ou de Madagascar.
+                title_other_crop = bool(title_terms & other_crop_words) and not bool(
+                    title_terms & clove_words
+                )
+                if title_other_crop:
+                    return
                 topic_axes = {
                     "qualite", "quality", "export", "exportation", "exportations",
                     "competitivite", "competitiveness", "marche", "market",
@@ -408,10 +416,18 @@ def search_bibliography(topic: str, max_results: int = 8):
             and bool(abstract_terms & other_crop_words)
             and not abstract_clove_match
         )
+        distinctive_topic_terms = topic_terms - {
+            "importance", "impact", "etude", "analyse", "malagasy", "madagascar"
+        }
+        abstract_has_topic = bool(abstract_terms & distinctive_topic_terms)
+        # Reconnaître les équivalents multilingues girofle/clove pour éviter
+        # les fausses alertes lorsque le titre est en français et le résumé en anglais.
+        if clove_topic and abstract_terms & clove_words:
+            abstract_has_topic = True
         abstract_topic_mismatch = bool(
-            abstract_terms and topic_terms and
-            (title_terms & (topic_terms - {"importance", "impact", "etude", "analyse", "malagasy", "madagascar"})) and
-            not (abstract_terms & (topic_terms - {"importance", "impact", "etude", "analyse", "malagasy", "madagascar"}))
+            abstract_terms and distinctive_topic_terms
+            and (title_terms & distinctive_topic_terms)
+            and not abstract_has_topic
         )
         metadata_status = (
             "ALERTE : le résumé semble concerner une autre filière que le titre ; ne pas citer avant vérification."
