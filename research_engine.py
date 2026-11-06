@@ -429,8 +429,16 @@ def search_bibliography(topic: str, max_results: int = 8):
         if abstract:
             details.append("Résumé : " + re.sub(r"\s+", " ", str(abstract))[:650])
         link_check = _check_link_details(url, doi)
-        doi_status = _verify_reference_link(url, doi) if doi else "absent"
-        source_status = _verify_reference_link(url) if not doi else doi_status
+        short_link_status = {
+            "pdf": "PDF accessible (gratuité non confirmée)",
+            "page": "page accessible (PDF non confirmé)",
+            "blocked": "accès bloqué au vérificateur",
+            "dead": "lien probablement indisponible",
+            "server_error": "erreur du serveur distant",
+            "uncertain": "à vérifier dans le navigateur",
+        }.get(link_check["status"], "non vérifié")
+        doi_status = short_link_status if doi else "absent"
+        source_status = short_link_status
         reference = {
             "title": title[:300], "year": year, "authors": author_list,
             "url": url, "type": work_type or "publication",
