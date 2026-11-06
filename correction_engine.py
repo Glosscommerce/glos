@@ -425,6 +425,10 @@ def correct_docx_with_languagetool(document, language_code: str):
         local_changes = _apply_local_corrections(paragraph)
         changes.extend(local_changes)
     detected_count = len(changes)
+    # Count a LanguageTool finding only once across correction passes.
+    # Paragraph identity + message + matched text + nearby context distinguish
+    # separate occurrences while remaining stable when unrelated text shifts.
+    detected_keys = set()
 
     # Re-run LanguageTool on the updated text so that agreements exposed by
     # earlier corrections (e.g. "Les enfant joue" -> "Les enfants jouent")
@@ -449,11 +453,35 @@ def correct_docx_with_languagetool(document, language_code: str):
     
             edits_by_run = {}
             for match in matches:
-                detected_count += 1
                 offset = int(match.get("offset", 0))
                 length = int(match.get("length", 0))
                 replacements = match.get("replacements") or []
                 original_text = text[offset:offset + length]
+
+                owner_for_count = next(
+                    (entry for entry in paragraph_starts
+                     if entry[0] <= offset and offset + length <= entry[1]),
+                    None,
+                )
+                paragraph_index = (
+                    paragraphs.index(owner_for_count[2])
+                    if owner_for_count is not None else -1
+                )
+                context_before = re.sub(r"\\s+", " ", text[max(0, offset - 35):offset]).casefold()
+                context_after = re.sub(
+                    r"\\s+", " ", text[offset + length:offset + length + 35]
+                ).casefold()
+                finding_key = (
+                    paragraph_index,
+                    original_text.casefold(),
+                    str(match.get("message", "")).strip().casefold(),
+                    context_before,
+                    context_after,
+                )
+                if finding_key not in detected_keys:
+                    detected_keys.add(finding_key)
+                    detected_count += 1
+
                 if length > 0 and _overlaps_protected_span(
                     offset, offset + length, protected_spans
                 ):
