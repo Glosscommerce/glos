@@ -203,6 +203,22 @@ def search_web(query: str, max_results: int = 8):
         domain = urlparse(url).netloc.lower().removeprefix("www.")
         if any(domain == bad or domain.endswith("." + bad) for bad in LOW_QUALITY_DOMAINS):
             continue
+        # Pour un sujet centré sur le girofle, ne retenir que les résultats
+        # qui parlent explicitement du girofle ET d'au moins un axe du sujet.
+        query_terms = _terms(query)
+        if query_terms & {"girofle", "clove", "cloves"}:
+            result_terms = _terms(title + " " + body)
+            clove_terms = {"girofle", "clove", "cloves", "syzygium", "aromaticum"}
+            subject_axes = {
+                "qualite", "quality", "export", "exportation", "exportations",
+                "competitivite", "competitiveness", "market", "marche",
+                "filiere", "value", "chain", "trade", "commerce",
+                "huile", "essential", "oil"
+            }
+            if not (result_terms & clove_terms):
+                continue
+            if not (result_terms & subject_axes):
+                continue
         score = _relevance(query, title, body, url)
         if score < 0.18:
             continue
@@ -247,7 +263,7 @@ def search_bibliography(topic: str, max_results: int = 8):
 
     topic = (topic or "").strip()
     limit = max(1, min(int(max_results), 10))
-    cache_key = (_normalise(topic), limit)
+    cache_key = ("classifier-v3", _normalise(topic), limit)
     now = time.time()
     with _BIBLIO_CACHE_LOCK:
         cached = _BIBLIO_CACHE.get(cache_key)
@@ -345,34 +361,37 @@ def search_bibliography(topic: str, max_results: int = 8):
         elif clove_topic:
             if figurative_match:
                 return
-            if clove_match:
-                if other_crop_only:
-                    return
-                if madagascar_title_match:
-                    relevance_group = "A"
-                    relevance_reason = "Le titre porte explicitement sur le girofle à Madagascar."
-                else:
-                    relevance_group = "B"
-                    relevance_reason = "Étude sur le girofle à l'international ; utile pour comparaison."
-            else:
-                # Écarter les notices dont le titre porte clairement sur une autre
-                # culture (litchi, vanille, cacao...), même si elles parlent aussi
-                # de qualité, d'exportation ou de Madagascar.
-                title_other_crop = bool(title_terms & other_crop_words) and not bool(
-                    title_terms & clove_words
-                )
-                if title_other_crop:
-                    return
-                topic_axes = {
-                    "qualite", "quality", "export", "exportation", "exportations",
-                    "competitivite", "competitiveness", "marche", "market",
-                    "filiere", "value", "chain", "commerce", "trade"
-                }
-                axis_hits = title_body & topic_axes
-                if not madagascar_match or len(axis_hits) < 2:
-                    return
+            title_other_crop = bool(title_terms & other_crop_words) and not bool(
+                title_terms & clove_words
+            )
+            if title_other_crop:
+                return
+
+            quality_terms = {
+                "qualite", "quality", "qualitative", "purity", "moisture",
+                "humidite", "huile", "oil", "eugenol", "aroma"
+            }
+            export_terms = {
+                "export", "exportation", "exportations", "exporter",
+                "competitivite", "competitiveness", "market", "marche",
+                "trade", "commerce", "value", "chain", "filiere"
+            }
+            quality_hits = title_body & quality_terms
+            export_hits = title_body & export_terms
+            has_clove = bool(title_body & clove_words)
+            has_madagascar = madagascar_match
+
+            if has_clove and has_madagascar and quality_hits and export_hits:
+                relevance_group = "A"
+                relevance_reason = "Référence directe : girofle malgache avec des éléments sur la qualité et l'exportation/compétitivité. Vérifier le document original."
+            elif has_clove and (has_madagascar or export_hits):
+                relevance_group = "B"
+                relevance_reason = "Référence sur le girofle ou la filière malgache, mais elle ne couvre pas explicitement tous les axes qualité et exportation/compétitivité."
+            elif has_madagascar and (quality_hits or export_hits):
                 relevance_group = "C"
-                relevance_reason = "Source connexe sur Madagascar et plusieurs axes qualité/export/compétitivité, sans mention directe du girofle."
+                relevance_reason = "Référence contextuelle sur Madagascar et un axe qualité/exportation, sans mention explicite du girofle."
+            else:
+                return
         else:
             # Pour les autres sujets, exiger une correspondance avec les mots
             # distinctifs du thème ; les termes génériques (importance, étude,
@@ -440,7 +459,7 @@ def search_bibliography(topic: str, max_results: int = 8):
         if key in seen:
             return
         seen.add(key)
-        author_list = [str(a).strip() for a in (authors or []) if str(a).strip()][:6]
+        author_list = [str(a).strip() for a in (authors or []) if str(a).strip()]
         details = []
         if doi:
             details.append("DOI : " + str(doi).replace("https://doi.org/", ""))
@@ -524,7 +543,7 @@ def search_bibliography(topic: str, max_results: int = 8):
             for work in response.json().get("results", []):
                 title = work.get("display_name") or ""
                 authors = [(a.get("author") or {}).get("display_name")
-                           for a in work.get("authorships", [])[:6]]
+                           for a in work.get("authorships", [])]
                 location = work.get("primary_location") or {}
                 url = location.get("landing_page_url") or work.get("doi") or work.get("id")
                 kind = (work.get("type") or "").lower()
@@ -553,7 +572,7 @@ def search_bibliography(topic: str, max_results: int = 8):
         response.raise_for_status()
         for item in response.json().get("message", {}).get("items", []):
             authors = [" ".join(filter(None, [a.get("given"), a.get("family")]))
-                       for a in item.get("author", [])[:6]]
+                       for a in item.get("author", [])]
             date_parts = (item.get("published", {}).get("date-parts") or [[None]])[0]
             doi = item.get("DOI")
             url = ("https://doi.org/" + doi) if doi else item.get("URL")
