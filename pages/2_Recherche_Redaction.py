@@ -7,7 +7,7 @@ from export_engine import build_pdf_from_docx
 
 st.title("🌐 Recherche & rédaction")
 st.caption("Recherche gratuite sur le Web et dans des catalogues bibliographiques publics. Aucun abonnement ni clé API payante requis.")
-st.info("Les résultats sont des pistes documentaires : ouvrez les notices originales et vérifiez les auteurs, dates, éditions et contenus avant toute citation.")
+st.info("CORRECTGLOSS classe les pistes documentaires par proximité avec le thème. Un lien accessible ne prouve pas que les auteurs, le résumé ou le contenu sont exacts : vérifiez toujours la notice originale avant toute citation.")
 
 query = st.text_input(
     "Sujet de recherche",
@@ -60,13 +60,13 @@ if results:
 bibliography = st.session_state.get("cg_bibliography", {})
 if bibliography:
     st.divider()
-    st.subheader("Auteurs et références bibliographiques")
+    st.subheader("Auteurs mentionnés et références bibliographiques")
     st.info(bibliography.get("_message", "Résultats issus de catalogues publics."))
     for diagnostic in bibliography.get("_diagnostics", []):
         st.caption(diagnostic)
 
     authors = bibliography.get("Auteurs et chercheurs", [])
-    with st.expander(f"Auteurs et chercheurs ({len(authors)})", expanded=bool(authors)):
+    with st.expander(f"Auteurs mentionnés dans les notices ({len(authors)})", expanded=bool(authors)):
         if not authors:
             st.caption("Aucun auteur identifié dans les notices retenues.")
         for i, item in enumerate(authors, 1):
@@ -88,8 +88,8 @@ if bibliography:
     else:
         group_details = {
             "A": ("A — Références directes", "Travaux correspondant directement aux termes distinctifs du sujet."),
-            "B": ("B — Références comparatives internationales", "Travaux comparatifs sur le même thème dans d'autres pays ou contextes."),
-            "C": ("C — Références connexes", "Travaux partiellement liés au sujet, utiles comme contexte théorique ou complémentaire."),
+            "B": ("B — Références partiellement concordantes", "Plusieurs termes distinctifs correspondent ; vérifier le résumé et le document original."),
+            "C": ("C — Références contextuelles", "Correspondance limitée ; utiliser seulement comme contexte après vérification."),
         }
     reference_categories = ["Articles scientifiques", "Livres", "Documents, mémoires et thèses"]
     for group in ("A", "B", "C"):
@@ -131,7 +131,7 @@ if bibliography:
                     if item.get("snippet"):
                         st.write(item["snippet"])
 
-    st.warning("Les résultats ne garantissent ni l’exactitude de la notice ni la qualité scientifique du document. Vérifiez chaque source avant de la citer.")
+    st.warning("Le classement A/B/C mesure une proximité thématique indicative, pas la qualité scientifique ni la véracité du document. Les auteurs affichés sont ceux indiqués par les catalogues, pas des auteurs vérifiés par CORRECTGLOSS. Lisez la source originale et contrôlez chaque référence avant de la citer.")
 
     if st.button("📥 Préparer la bibliographie Word et PDF"):
         try:
@@ -140,8 +140,8 @@ if bibliography:
             doc.add_paragraph("Sujet : " + st.session_state.get("cg_research_query", query))
             export_groups = {
                 "A — Références directes": "A",
-                "B — Références comparatives internationales": "B",
-                "C — Références connexes à vérifier": "C",
+                "B — Références partiellement concordantes": "B",
+                "C — Références contextuelles à vérifier": "C",
             }
             for group_title, group_code in export_groups.items():
                 doc.add_heading(group_title, level=1)
