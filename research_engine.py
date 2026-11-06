@@ -322,12 +322,19 @@ def search_bibliography(topic: str, max_results: int = 8):
                 return
             if len(anchors) >= 2 and len(anchor_hits) < 1:
                 return
-            if len(anchor_hits) >= min(2, len(anchors)):
+            # Classement générique pour tous les domaines :
+            # A = tous les termes distinctifs sont retrouvés ;
+            # B = plusieurs termes distinctifs concordent ;
+            # C = un seul indice pertinent, à utiliser comme contexte seulement.
+            if len(anchor_hits) == len(anchors) and score >= 0.18:
                 relevance_group = "A"
-                relevance_reason = "Les termes distinctifs du sujet apparaissent dans la notice."
+                relevance_reason = "Tous les termes distinctifs du sujet sont retrouvés dans la notice ; vérifier le contenu original."
+            elif len(anchor_hits) >= 2:
+                relevance_group = "B"
+                relevance_reason = "Plusieurs termes distinctifs concordent ; source comparative à vérifier."
             else:
                 relevance_group = "C"
-                relevance_reason = "Correspondance partielle avec le sujet ; vérifier l'utilité de cette source."
+                relevance_reason = "Correspondance partielle ; source de contexte uniquement, à vérifier."
 
         minimum_score = 0.08 if (
             (clove_topic and relevance_group in {"A", "B"}) or tsaboraha_topic
@@ -340,10 +347,17 @@ def search_bibliography(topic: str, max_results: int = 8):
             and bool(abstract_terms & other_crop_words)
             and not abstract_clove_match
         )
+        abstract_topic_mismatch = bool(
+            abstract_terms and topic_terms and
+            (title_terms & (topic_terms - {"importance", "impact", "etude", "analyse", "malagasy", "madagascar"})) and
+            not (abstract_terms & (topic_terms - {"importance", "impact", "etude", "analyse", "malagasy", "madagascar"}))
+        )
         metadata_status = (
-            "À vérifier : le résumé contient des mots-clés d'une autre filière que le titre."
+            "ALERTE : le résumé semble concerner une autre filière que le titre ; ne pas citer avant vérification."
             if abstract_crop_mismatch else
-            "Notice à vérifier auprès de la source originale."
+            "ALERTE : les mots distinctifs du thème apparaissent dans le titre mais pas dans le résumé ; vérifier la notice originale."
+            if abstract_topic_mismatch else
+            "Notice bibliographique non validée automatiquement : le lien peut être accessible sans que le titre, les auteurs ou le contenu soient confirmés."
         )
         key = (category, _normalise(title))
         if key in seen:
