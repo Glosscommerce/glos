@@ -118,6 +118,14 @@ LOCAL_CORRECTION_RULES = (
      "ma visite d’entreprise", "Correction du déterminant et du nom « visite »."),
     (r"(?i)\bles équipements moderne\b",
      "les équipements modernes", "Accord de l'adjectif avec le nom pluriel."),
+    # English high-confidence fallback rules, independent of remote service availability.
+    (r"(?i)\bShe\s+go\b", "She goes", "Third-person singular: add -es to the verb."),
+    (r"(?i)\bThey\s+is\b", "They are", "Plural subject requires the verb « are »."),
+    (r"(?i)\bHe\s+have\b", "He has", "Third-person singular: « have » becomes « has »."),
+    (r"(?i)\bHé\s+have\s+à\s+new\s+computer\b",
+     "He has a new computer", "Correction of the intended English sentence and accent/word errors."),
+    (r"(?i)\binformations\b", "information",
+     "In standard English, « information » is an uncountable noun."),
 )
 
 
