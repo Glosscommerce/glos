@@ -672,7 +672,40 @@ def search_bibliography(topic: str, max_results: int = 8):
                            -x.get("relevance", 0))
         )
         output[category] = output[category][:limit]
-    output["Auteurs et chercheurs"] = output["Auteurs et chercheurs"][:limit * 2]
+    # Reconstruire la liste des auteurs à partir des seules références finales
+    # affichées : aucun auteur n'est perdu par une limite arbitraire à 6 ou 10.
+    output["Auteurs et chercheurs"] = []
+    for category in ("Articles scientifiques", "Livres", "Documents, mémoires et thèses"):
+        for reference in output[category]:
+            for author in reference.get("authors", []):
+                author_key = _normalise(author)
+                if not author_key:
+                    continue
+                author_entry = next(
+                    (entry for entry in output["Auteurs et chercheurs"]
+                     if _normalise(entry["name"]) == author_key), None
+                )
+                if author_entry is None:
+                    author_entry = {
+                        "name": author, "url": reference.get("url", ""),
+                        "provider": reference.get("provider", ""),
+                        "publications": [],
+                    }
+                    output["Auteurs et chercheurs"].append(author_entry)
+                if not any(
+                    _normalise(pub.get("title")) == _normalise(reference.get("title"))
+                    for pub in author_entry["publications"]
+                ):
+                    author_entry["publications"].append({
+                        "title": reference.get("title", ""),
+                        "year": reference.get("year"),
+                        "category": category,
+                        "url": reference.get("url", ""),
+                        "doi": reference.get("doi"),
+                        "provider": reference.get("provider", ""),
+                        "type": reference.get("type", "publication"),
+                        "relevance_group": reference.get("relevance_group", "C"),
+                    })
     output["_diagnostics"] = errors
     output["_message"] = (
         "Certaines bases n'ont pas répondu : " + "; ".join(errors)
