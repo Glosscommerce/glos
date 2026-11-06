@@ -187,10 +187,18 @@ if writing_submit:
         )
         prepared_text_parts = [writing_subject.strip()]
         for heading, body in prepared_lines[4:]:
-            prepared_doc.add_heading(heading, level=1)
-            for paragraph_text in body.split("\n"):
-                prepared_doc.add_paragraph(paragraph_text)
-            prepared_text_parts.extend([heading, body])
+            prepared_doc.add_heading(str(heading), level=1)
+            body_paragraphs = (
+                list(body) if isinstance(body, (list, tuple))
+                else str(body or "").splitlines()
+            )
+            body_text_parts = []
+            for paragraph_text in body_paragraphs:
+                paragraph_text = str(paragraph_text).strip()
+                if paragraph_text:
+                    prepared_doc.add_paragraph(paragraph_text)
+                    body_text_parts.append(paragraph_text)
+            prepared_text_parts.extend([str(heading), "\n".join(body_text_parts)])
         prepared_buffer = io.BytesIO()
         prepared_doc.save(prepared_buffer)
         prepared_docx_bytes = prepared_buffer.getvalue()
