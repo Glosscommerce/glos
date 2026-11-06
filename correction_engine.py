@@ -141,7 +141,7 @@ LOCAL_CORRECTION_RULES = (
      "« Equipment » is uncountable in standard English."),
     (r"(?i)\bschools\s+in\s+rural\s+areas\s+does\s+not\s+have\b",
      "schools in rural areas do not have", "Plural subject requires « do not have »."),
-    (r"(?i)\bteachers\s+also\s+plays\b", "teachers also play",
+    (r"(?i)\bteachers\s+also\s+plays\b", "Teachers also play",
      "Plural subject requires the base verb « play »."),
     (r"(?i)\ba\s+good\s+teacher\s+encourage\b", "a good teacher encourages",
      "Third-person singular subject requires « encourages »."),
