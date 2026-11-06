@@ -1,9 +1,27 @@
 """Page de recherche documentaire gratuite de CORRECTGLOSS V2."""
 import io
+from urllib.parse import urlsplit, urlunsplit
 import streamlit as st
 from docx import Document
 from research_engine import search_web, search_bibliography
 from export_engine import build_pdf_from_docx
+
+
+def normalize_source_url(url):
+    """Corrige l'ancien hôte BAU qui échoue en DNS, sans modifier les autres sources."""
+    if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+        return url or ""
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+        if host == "biblio.univ-antananarivo.mg":
+            netloc = "www.biblio.univ-antananarivo.mg"
+            if parts.port:
+                netloc += f":{parts.port}"
+            return urlunsplit(("https", netloc, parts.path, parts.query, parts.fragment))
+    except Exception:
+        pass
+    return url
 
 st.title("🌐 Recherche & rédaction")
 st.caption("Recherche gratuite sur le Web et dans des catalogues bibliographiques publics. Aucun abonnement ni clé API payante requis.")
@@ -57,6 +75,7 @@ if results:
             if item.get("link_status") in {"page", "pdf"} and item.get("final_url")
             else item.get("url", "")
         )
+        source_url = normalize_source_url(source_url)
         if source_url.startswith(("https://", "http://")):
             st.link_button("Ouvrir la source dans un nouvel onglet", source_url, key=f"web_source_{i}")
         if item.get("snippet"):
@@ -144,6 +163,7 @@ if bibliography:
                         if item.get("link_status") in {"page", "pdf"} and item.get("final_url")
                         else item.get("url", "")
                     )
+                    source_url = normalize_source_url(source_url)
                     if source_url.startswith(("https://", "http://")):
                         st.link_button(
                             "Consulter la notice originale",
