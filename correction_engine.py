@@ -118,6 +118,10 @@ LOCAL_CORRECTION_RULES = (
      "ma visite d’entreprise", "Correction du déterminant et du nom « visite »."),
     (r"(?i)\bles équipements moderne\b",
      "les équipements modernes", "Accord de l'adjectif avec le nom pluriel."),
+    (r"(?i)\bHé\b", "He", "Remove an unintended accent from the English pronoun."),
+    (r"(?i)\bHe\s+HAS\b", "He has", "Normalize pronoun and verb capitalization."),
+    (r"(?i)\bThe\s+information\s+are\b", "The information is",
+     "The uncountable noun « information » takes a singular verb."),
     # English high-confidence fallback rules, independent of remote service availability.
     (r"(?i)\bShe\s+go\b", "She goes", "Third-person singular: add -es to the verb."),
     (r"(?i)\bThey\s+is\b", "They are", "Plural subject requires the verb « are »."),
