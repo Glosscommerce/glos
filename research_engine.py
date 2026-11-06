@@ -228,12 +228,12 @@ def search_bibliography(topic: str, max_results: int = 8):
         abstract_terms = _terms(abstract or "")
         title_body = title_terms | abstract_terms
         topic_terms = _terms(topic)
+        topic_norm = _normalise(topic)
+        title_norm = _normalise(title)
         clove_topic = bool(topic_terms & {"girofle", "clove", "cloves"})
         clove_words = {"girofle", "clove", "cloves", "syzygium", "aromaticum"}
         clove_match = bool(title_body & clove_words)
         abstract_clove_match = bool(abstract_terms & clove_words)
-        topic_norm = _normalise(topic)
-        title_norm = _normalise(title)
         madagascar_match = any(
             term in (title_norm + " " + _normalise(abstract or ""))
             for term in ("madagascar", "malgache", "malagasy")
@@ -252,7 +252,36 @@ def search_bibliography(topic: str, max_results: int = 8):
         figurative_match = bool(title_body & {"gaullisme", "gaulliste"})
         relevance_group = "A"
         relevance_reason = "Correspondance directe avec le sujet."
-        if clove_topic:
+
+        # Traitement strict des sujets culturels centrés sur le Tsaboraha :
+        # « malagasy » seul ne constitue jamais une preuve de pertinence directe.
+        tsaboraha_topic = bool(topic_terms & {"tsaboraha", "tsboraha", "tsaborage"})
+        betsimisaraka_topic = "betsimisaraka" in topic_terms
+        if tsaboraha_topic:
+            tsaboraha_words = {"tsaboraha", "tsboraha", "tsaborage"}
+            betsimisaraka_match = "betsimisaraka" in title_body
+            tsaboraha_match = bool(title_body & tsaboraha_words)
+            if tsaboraha_match and betsimisaraka_match:
+                relevance_group = "A"
+                relevance_reason = "La notice mentionne explicitement le Tsaboraha et les Betsimisaraka."
+            elif tsaboraha_match:
+                relevance_group = "B"
+                relevance_reason = "La notice mentionne le Tsaboraha, mais le lien spécifique avec les Betsimisaraka reste à confirmer."
+            else:
+                cultural_context = {
+                    "rituel", "rituels", "ritual", "rituals", "coutume", "coutumes",
+                    "custom", "customs", "culture", "cultural", "tradition",
+                    "traditions", "ancetre", "ancetres", "ancestor", "ancestors",
+                    "tromba", "fanokoarana", "famadihana", "funeraire", "funeral",
+                    "mort", "death", "religion", "spirit", "esprit"
+                }
+                context_match = bool(title_body & cultural_context)
+                if betsimisaraka_match and context_match:
+                    relevance_group = "C"
+                    relevance_reason = "Référence connexe sur la culture, les rites ou les traditions Betsimisaraka ; elle ne traite pas explicitement du Tsaboraha."
+                else:
+                    return
+        elif clove_topic:
             if figurative_match:
                 return
             if clove_match:
@@ -263,11 +292,8 @@ def search_bibliography(topic: str, max_results: int = 8):
                     relevance_reason = "Le titre porte explicitement sur le girofle à Madagascar."
                 else:
                     relevance_group = "B"
-                    relevance_reason = "Étude sur le girofle à l'international ; utile pour comparaison, même si Madagascar est cité dans le résumé."
+                    relevance_reason = "Étude sur le girofle à l'international ; utile pour comparaison."
             else:
-                # Catégorie C : contexte théorique/économique lié à Madagascar.
-                # Les autres filières peuvent être utiles ici, mais la notice doit
-                # mentionner Madagascar et au moins deux axes du sujet.
                 topic_axes = {
                     "qualite", "quality", "export", "exportation", "exportations",
                     "competitivite", "competitiveness", "marche", "market",
@@ -278,7 +304,34 @@ def search_bibliography(topic: str, max_results: int = 8):
                     return
                 relevance_group = "C"
                 relevance_reason = "Source connexe sur Madagascar et plusieurs axes qualité/export/compétitivité, sans mention directe du girofle."
-        minimum_score = 0.08 if clove_topic and relevance_group in {"A", "B"} else 0.12
+        else:
+            # Pour les autres sujets, exiger une correspondance avec les mots
+            # distinctifs du thème ; les termes génériques (importance, étude,
+            # analyse, contribution, malagasy...) ne suffisent pas.
+            generic_terms = {
+                "importance", "impact", "effet", "effets", "etude", "analyse",
+                "contribution", "amelioration", "developpement", "role", "place",
+                "cas", "exemple", "approche", "problematique", "malagasy",
+                "madagascar", "malgache", "chez", "dans", "pour"
+            }
+            anchors = topic_terms - generic_terms
+            anchor_hits = anchors & title_body
+            if not anchors or not anchor_hits:
+                return
+            if betsimisaraka_topic and "betsimisaraka" not in title_body:
+                return
+            if len(anchors) >= 2 and len(anchor_hits) < 1:
+                return
+            if len(anchor_hits) >= min(2, len(anchors)):
+                relevance_group = "A"
+                relevance_reason = "Les termes distinctifs du sujet apparaissent dans la notice."
+            else:
+                relevance_group = "C"
+                relevance_reason = "Correspondance partielle avec le sujet ; vérifier l'utilité de cette source."
+
+        minimum_score = 0.08 if (
+            (clove_topic and relevance_group in {"A", "B"}) or tsaboraha_topic
+        ) else 0.12
         if score < minimum_score:
             return
         # Détecter les notices dont le titre et le résumé semblent parler de sujets différents.
