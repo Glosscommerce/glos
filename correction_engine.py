@@ -529,4 +529,11 @@ def correct_docx_with_languagetool(document, language_code: str):
         if len(changes) == applied_before_pass:
             break
 
+    # Final local pass: LanguageTool can occasionally suggest an incorrect casing/accent
+    # or leave a known agreement error after earlier edits. Re-apply only the
+    # conservative local rules so the final DOCX cannot undo these high-confidence fixes.
+    for paragraph in paragraphs:
+        final_local_changes = _apply_local_corrections(paragraph)
+        changes.extend(final_local_changes)
+
     return document, changes, skipped, detected_count, suggestions
