@@ -253,19 +253,14 @@ def search_bibliography(topic: str, max_results: int = 8):
         if clove_topic:
             if not clove_match or other_crop_only or figurative_match:
                 return
-        # Pour un sujet qualité/exportation/compétitivité, exiger aussi au moins
-        # un axe du sujet dans le titre ou le résumé. Cela élimine les faux positifs
-        # sur le poisson, les pathologies, la compétitivité urbaine, etc.
-        topic_axes = topic_terms & {
-            "qualite", "quality", "export", "exportation", "competitivite",
-            "competitiveness", "marche", "market", "filiere", "value", "chain"
-        }
-        if clove_topic and topic_axes:
-            axis_terms = _terms(title + " " + (abstract or ""))
-            if not (topic_axes & axis_terms):
-                return
-        # Seuil relevé pour limiter les résultats faiblement liés au sujet.
-        if score < 0.20:
+        # Pour le girofle, l'absence des mots « qualité », « exportation » ou
+        # « compétitivité » dans le titre/résumé ne suffit pas à rejeter une source :
+        # certains travaux portent sur la filière, la production ou les propriétés
+        # du clou de girofle. Le lien direct est établi par la mention explicite
+        # du girofle/clove, tandis que la pertinence est évaluée avec un seuil adapté.
+        # Les autres filières et les emplois figurés restent exclus ci-dessus.
+        minimum_score = 0.08 if clove_topic else 0.20
+        if score < minimum_score:
             return
         key = (category, _normalise(title))
         if key in seen:
