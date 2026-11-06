@@ -207,9 +207,22 @@ def search_web(query: str, max_results: int = 8):
         if score < 0.18:
             continue
         seen.add(url)
+        link_check = _check_link_details(url)
         cleaned.append({
             "title": title[:300], "url": url, "snippet": body[:1200],
             "relevance": round(score, 2),
+            "link_status": link_check["status"],
+            "link_label": {
+                "pdf": "PDF accessible (gratuité non confirmée)",
+                "page": "Page accessible (PDF non confirmé)",
+                "blocked": "Vérification bloquée — ouvrir dans le navigateur",
+                "dead": "Lien probablement indisponible",
+                "server_error": "Erreur du serveur distant",
+                "uncertain": "À vérifier dans le navigateur",
+            }.get(link_check["status"], "Non vérifié"),
+            "link_detail": link_check["detail"],
+            "final_url": link_check["final_url"],
+            "content_type": link_check["content_type"],
         })
     cleaned.sort(key=lambda item: item["relevance"], reverse=True)
     return cleaned[:max(1, min(int(max_results), 10))]
@@ -415,6 +428,7 @@ def search_bibliography(topic: str, max_results: int = 8):
             details.append("Type : " + str(work_type))
         if abstract:
             details.append("Résumé : " + re.sub(r"\s+", " ", str(abstract))[:650])
+        link_check = _check_link_details(url, doi)
         doi_status = _verify_reference_link(url, doi) if doi else "absent"
         source_status = _verify_reference_link(url) if not doi else doi_status
         reference = {
@@ -422,6 +436,18 @@ def search_bibliography(topic: str, max_results: int = 8):
             "url": url, "type": work_type or "publication",
             "provider": provider, "relevance": round(score, 2), "doi": doi,
             "doi_status": doi_status, "source_status": source_status,
+            "link_status": link_check["status"],
+            "link_label": {
+                "pdf": "PDF accessible (gratuité non confirmée)",
+                "page": "Page accessible (PDF non confirmé)",
+                "blocked": "Vérification bloquée — ouvrir dans le navigateur",
+                "dead": "Lien probablement indisponible",
+                "server_error": "Erreur du serveur distant",
+                "uncertain": "À vérifier dans le navigateur",
+            }.get(link_check["status"], "Non vérifié"),
+            "link_detail": link_check["detail"],
+            "final_url": link_check["final_url"],
+            "content_type": link_check["content_type"],
             "relevance_group": relevance_group,
             "relevance_reason": relevance_reason,
             "metadata_status": metadata_status,
