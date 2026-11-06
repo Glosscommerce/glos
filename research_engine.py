@@ -247,22 +247,22 @@ def search_bibliography(topic: str, max_results: int = 8):
         # figurée sans rapport avec la filière agricole (ex. gaullisme).
         figurative_terms = {"gaullisme", "gaulliste"}
         figurative_match = bool(title_body & figurative_terms)
-        # Ne pas exiger que chaque notice mentionne explicitement Madagascar
-        # ou le girofle dans le titre : certaines notices indexent ces mots dans
-        # les mots-clés, les métadonnées ou les publications liées de l'auteur.
-        # La recherche initiale est déjà ciblée ; on conserve le seuil de pertinence
-        # et on écarte seulement les faux positifs clairement consacrés à une autre culture.
-        if clove_topic and (other_crop_only or figurative_match):
-            return
-        # Pour un mémoire qualité/exportation, exiger au moins un axe
-        # directement visible dans le titre ou le résumé.
+        # Pour un sujet centré sur le girofle, la notice doit parler explicitement
+        # du girofle/clove (dans le titre ou le résumé). Un simple mot commun comme
+        # « qualité », « exportation » ou « compétitivité » ne suffit pas.
+        if clove_topic:
+            if not clove_match or other_crop_only or figurative_match:
+                return
+        # Pour un sujet qualité/exportation/compétitivité, exiger aussi au moins
+        # un axe du sujet dans le titre ou le résumé. Cela élimine les faux positifs
+        # sur le poisson, les pathologies, la compétitivité urbaine, etc.
         topic_axes = topic_terms & {
             "qualite", "quality", "export", "exportation", "competitivite",
             "competitiveness", "marche", "market", "filiere", "value", "chain"
         }
         if clove_topic and topic_axes:
             axis_terms = _terms(title + " " + (abstract or ""))
-            if not (topic_axes & axis_terms) and score < 0.35:
+            if not (topic_axes & axis_terms):
                 return
         # Seuil relevé pour limiter les résultats faiblement liés au sujet.
         if score < 0.20:
