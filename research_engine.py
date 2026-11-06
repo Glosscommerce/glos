@@ -247,9 +247,12 @@ def search_bibliography(topic: str, max_results: int = 8):
         # figurée sans rapport avec la filière agricole (ex. gaullisme).
         figurative_terms = {"gaullisme", "gaulliste"}
         figurative_match = bool(title_body & figurative_terms)
-        if clove_topic and (other_crop_only or not clove_match or figurative_match):
-            return
-        if clove_topic and madagascar_topic and not madagascar_match:
+        # Ne pas exiger que chaque notice mentionne explicitement Madagascar
+        # ou le girofle dans le titre : certaines notices indexent ces mots dans
+        # les mots-clés, les métadonnées ou les publications liées de l'auteur.
+        # La recherche initiale est déjà ciblée ; on conserve le seuil de pertinence
+        # et on écarte seulement les faux positifs clairement consacrés à une autre culture.
+        if clove_topic and (other_crop_only or figurative_match):
             return
         # Pour un mémoire qualité/exportation, exiger au moins un axe
         # directement visible dans le titre ou le résumé.
