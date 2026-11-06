@@ -186,13 +186,14 @@ def build_pdf_from_docx(docx_bytes, font="Times New Roman", font_size=12,
                 ]))
                 story_body.extend([Spacer(1, 6), table, Spacer(1, 8)])
 
-    story = []
+    # Keep the document content first and place the table of contents at the end.
+    story = list(story_body)
     if entries:
+        story.append(PageBreak())
         story.extend([Paragraph("TABLE DES MATIÈRES", sample["Title"]), Spacer(1, 8)])
         toc = TableOfContents()
         toc.levelStyles = toc_styles
-        story.extend([toc, PageBreak()])
-    story.extend(story_body)
+        story.append(toc)
 
     output = io.BytesIO()
     left = right = float(margin_cm) * cm
