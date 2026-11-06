@@ -207,10 +207,15 @@ def search_web(query: str, max_results: int = 8):
         if score < 0.18:
             continue
         seen.add(url)
-        link_check = _check_link_details(url)
         cleaned.append({
             "title": title[:300], "url": url, "snippet": body[:1200],
             "relevance": round(score, 2),
+        })
+    cleaned.sort(key=lambda item: item["relevance"], reverse=True)
+    selected = cleaned[:max(1, min(int(max_results), 10))]
+    for item in selected:
+        link_check = _check_link_details(item["url"])
+        item.update({
             "link_status": link_check["status"],
             "link_label": {
                 "pdf": "PDF accessible (gratuité non confirmée)",
@@ -224,8 +229,7 @@ def search_web(query: str, max_results: int = 8):
             "final_url": link_check["final_url"],
             "content_type": link_check["content_type"],
         })
-    cleaned.sort(key=lambda item: item["relevance"], reverse=True)
-    return cleaned[:max(1, min(int(max_results), 10))]
+    return selected
 
 
 # Cache mémoire court : évite de répéter les mêmes appels lors des reruns Streamlit.
