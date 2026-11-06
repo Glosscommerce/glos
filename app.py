@@ -137,7 +137,7 @@ with st.form("cg_prepare_writing_form"):
 def cg_build_writing_outline(subject, kind, level, lang, instructions, full_draft):
     """Create a substantive editable starter draft without inventing research evidence."""
     fr = lang == "Français"
-    subject = re.sub(r"\\s+", " ", str(subject or "")).strip(" .;:")
+    subject = re.sub(r"\s+", " ", str(subject or "")).strip(" .;:")
     clove = any(x in subject.lower() for x in ("girofle", "clove"))
     if fr and kind == "Mémoire / Projet de recherche":
         if clove:
