@@ -78,11 +78,19 @@ if bibliography:
                     group = pub.get("relevance_group", "C")
                     st.markdown(f"- **[{group}]** [{pub_title}]({pub_url})" if pub_url else f"- **[{group}]** {pub_title}")
 
-    group_details = {
-        "A": ("A — Références directes", "Travaux qui mentionnent explicitement le girofle et Madagascar."),
-        "B": ("B — Références comparatives internationales", "Travaux sur le girofle dans d'autres pays, utiles pour comparer les marchés et la compétitivité."),
-        "C": ("C — Références connexes", "Travaux sur Madagascar et plusieurs thèmes liés à la qualité, l'exportation ou la compétitivité, sans mention directe du girofle."),
-    }
+    current_topic = st.session_state.get("cg_research_query", query).lower()
+    if "tsaboraha" in current_topic or "tsboraha" in current_topic:
+        group_details = {
+            "A": ("A — Références directes", "Travaux qui mentionnent explicitement le Tsaboraha et les Betsimisaraka."),
+            "B": ("B — Références comparatives", "Travaux qui mentionnent le Tsaboraha, mais dont le lien spécifique avec les Betsimisaraka doit être confirmé."),
+            "C": ("C — Références connexes", "Travaux sur les rites, coutumes et traditions Betsimisaraka ; ils apportent un contexte culturel sans traiter nécessairement du Tsaboraha."),
+        }
+    else:
+        group_details = {
+            "A": ("A — Références directes", "Travaux correspondant directement aux termes distinctifs du sujet."),
+            "B": ("B — Références comparatives internationales", "Travaux comparatifs sur le même thème dans d'autres pays ou contextes."),
+            "C": ("C — Références connexes", "Travaux partiellement liés au sujet, utiles comme contexte théorique ou complémentaire."),
+        }
     reference_categories = ["Articles scientifiques", "Livres", "Documents, mémoires et thèses"]
     for group in ("A", "B", "C"):
         grouped_items = {
