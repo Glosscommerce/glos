@@ -51,7 +51,14 @@ results = st.session_state.get("cg_research_results", [])
 if results:
     st.subheader(f"Résultats Web ({len(results)})")
     for i, item in enumerate(results, 1):
-        st.markdown(f"**{i}. [{item.get('title', 'Titre indisponible')}]({item.get('url', '')})**")
+        st.markdown(f"**{i}. {item.get('title', 'Titre indisponible')}**")
+        source_url = (
+            item.get("final_url")
+            if item.get("link_status") in {"page", "pdf"} and item.get("final_url")
+            else item.get("url", "")
+        )
+        if source_url.startswith(("https://", "http://")):
+            st.link_button("Ouvrir la source dans un nouvel onglet", source_url, key=f"web_source_{i}")
         if item.get("snippet"):
             st.write(item["snippet"])
         st.caption(f"Pertinence indicative : {round(float(item.get('relevance', 0)) * 100)} %")
@@ -126,8 +133,17 @@ if bibliography:
                         meta.append("DOI : " + str(item["doi"]).replace("https://doi.org/", ""))
                     if meta:
                         st.caption(" • ".join(meta))
-                    if item.get("url", "").startswith(("https://", "http://")):
-                        st.markdown(f"[Consulter la notice originale]({item['url']})")
+                    source_url = (
+                        item.get("final_url")
+                        if item.get("link_status") in {"page", "pdf"} and item.get("final_url")
+                        else item.get("url", "")
+                    )
+                    if source_url.startswith(("https://", "http://")):
+                        st.link_button(
+                            "Consulter la notice originale",
+                            source_url,
+                            key=f"bib_{group}_{category}_{i}",
+                        )
                     if item.get("link_label"):
                         st.caption("Vérification du lien : " + str(item["link_label"]))
                     if item.get("link_detail"):
