@@ -445,15 +445,28 @@ if st.button("Préparer les fichiers Word et PDF", type="primary"):
     for section in formatted.sections:
         section.top_margin = section.bottom_margin = Inches(margin_cm / 2.54)
         section.left_margin = section.right_margin = Inches(margin_cm / 2.54)
-    for para in formatted.paragraphs:
+    # Apply heading styles first: assigning a Word Heading style afterwards can
+    # replace paragraph formatting, including the selected line spacing.
+    apply_academic_heading_styles(formatted)
+
+    def format_export_paragraph(para):
         if justify and not (para.style and para.style.name.lower().startswith("heading")):
             para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        # Set an explicit multiple line spacing on every paragraph after styles.
         para.paragraph_format.line_spacing = float(line_spacing)
         para.paragraph_format.space_after = Pt(6)
         for run in para.runs:
             run.font.name = font
             run.font.size = Pt(int(font_size))
-    apply_academic_heading_styles(formatted)
+
+    for para in formatted.paragraphs:
+        format_export_paragraph(para)
+    # Word tables contain their own paragraphs and need the same formatting.
+    for table in formatted.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    format_export_paragraph(para)
     add_page_numbers(formatted)
     formatted = add_word_toc(formatted)
     word_output = io.BytesIO()
