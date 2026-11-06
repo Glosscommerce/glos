@@ -64,30 +64,74 @@ def _relevance(topic, title="", snippet="", url=""):
                + overlap * 0.25 + academic_bonus + context_bonus)
 
 
-def _verify_reference_link(url, doi=None):
-    """Vérifie la résolution du DOI ou l'accessibilité HTTP de la notice."""
-    import requests
+def _check_link_details(url, doi=None):
+    """Vérifie un lien sans télécharger le document ; distingue page et PDF."""
     target = ("https://doi.org/" + str(doi).replace("https://doi.org/", "").strip()
               if doi else str(url or "").strip())
+    result = {
+        "status": "non vérifié",
+        "http_status": None,
+        "final_url": target,
+        "content_type": "",
+        "is_pdf": False,
+        "detail": "URL absente ou non prise en charge.",
+    }
     if not target.startswith(("https://", "http://")):
-        return "non vérifié"
+        return result
+
+    response = None
     try:
-        response = requests.head(
-            target, allow_redirects=True,
-            headers={"User-Agent": "CORRECTGLOSS/1.2 (reference link check)"},
-            timeout=7,
-        )
-        if response.status_code < 400:
-            return "accessible"
-        # Certains dépôts refusent HEAD mais acceptent GET.
+        # GET en streaming est plus compatible que HEAD avec les dépôts académiques.
+        # Le corps n'est jamais téléchargé : on lit uniquement les en-têtes.
         response = requests.get(
             target, allow_redirects=True, stream=True,
-            headers={"User-Agent": "CORRECTGLOSS/1.2 (reference link check)"},
-            timeout=7,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; CORRECTGLOSS link checker/2.1)"},
+            timeout=(5, 8),
         )
-        return "accessible" if response.status_code < 400 else "à vérifier"
-    except requests.RequestException:
-        return "à vérifier"
+        status = response.status_code
+        final_url = response.url
+        content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        is_pdf = (
+            "application/pdf" in content_type
+            or urlparse(final_url).path.lower().endswith(".pdf")
+        )
+        result.update({
+            "http_status": status,
+            "final_url": final_url,
+            "content_type": content_type,
+            "is_pdf": is_pdf,
+        })
+        if 200 <= status < 300 and is_pdf:
+            result.update(status="pdf", detail="Le serveur répond et indique un fichier PDF. La gratuité et la licence restent à vérifier.")
+        elif 200 <= status < 300:
+            result.update(status="page", detail="La page de destination répond. Le téléchargement d'un PDF n'est pas confirmé.")
+        elif status in (401, 403, 405, 429):
+            result.update(status="blocked", detail="Le serveur bloque ou limite la vérification automatique ; essayez d'ouvrir le lien dans votre navigateur.")
+        elif status in (404, 410):
+            result.update(status="dead", detail="La page ou le document semble introuvable (HTTP {}).".format(status))
+        elif status >= 500:
+            result.update(status="server_error", detail="Le serveur distant rencontre une erreur (HTTP {}).".format(status))
+        else:
+            result.update(status="uncertain", detail="Réponse HTTP {} : disponibilité à confirmer.".format(status))
+    except requests.RequestException as exc:
+        result.update(status="uncertain", detail="Vérification impossible depuis le serveur CORRECTGLOSS : " + str(exc)[:140])
+    finally:
+        if response is not None:
+            response.close()
+    return result
+
+
+def _verify_reference_link(url, doi=None):
+    """Compatibilité : renvoie un libellé court pour les anciennes interfaces."""
+    details = _check_link_details(url, doi)
+    return {
+        "pdf": "PDF accessible (gratuité non confirmée)",
+        "page": "page accessible (PDF non confirmé)",
+        "blocked": "accès bloqué au vérificateur",
+        "dead": "lien probablement indisponible",
+        "server_error": "erreur du serveur distant",
+        "uncertain": "à vérifier dans le navigateur",
+    }.get(details["status"], "non vérifié")
 
 
 def _openalex_abstract(inverted_index):
