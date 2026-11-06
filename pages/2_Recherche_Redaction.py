@@ -55,7 +55,13 @@ if results:
         if item.get("snippet"):
             st.write(item["snippet"])
         st.caption(f"Pertinence indicative : {round(float(item.get('relevance', 0)) * 100)} %")
-    st.warning("Un extrait de moteur de recherche ne remplace pas la lecture de la page originale.")
+        if item.get("link_label"):
+            st.caption("Vérification du lien : " + item["link_label"])
+        if item.get("link_detail"):
+            st.caption(item["link_detail"])
+        if item.get("final_url") and item.get("final_url") != item.get("url"):
+            st.caption("Adresse finale après redirection : " + item["final_url"])
+    st.warning("Un lien marqué « page accessible » ne signifie pas qu'un PDF est disponible. Même lorsqu'un PDF répond, CORRECTGLOSS ne peut pas confirmer automatiquement que son accès est gratuit ou que sa licence autorise sa réutilisation. Les liens bloqués par un serveur doivent être essayés dans votre navigateur.")
 
 bibliography = st.session_state.get("cg_bibliography", {})
 if bibliography:
@@ -122,8 +128,12 @@ if bibliography:
                         st.caption(" • ".join(meta))
                     if item.get("url", "").startswith(("https://", "http://")):
                         st.markdown(f"[Consulter la notice originale]({item['url']})")
-                    if item.get("doi_status"):
-                        st.caption("État du lien/DOI (ne garantit pas le téléchargement du PDF) : " + str(item["doi_status"]))
+                    if item.get("link_label"):
+                        st.caption("Vérification du lien : " + str(item["link_label"]))
+                    if item.get("link_detail"):
+                        st.caption(item["link_detail"])
+                    if item.get("final_url") and item.get("final_url") != item.get("url"):
+                        st.caption("Adresse finale après redirection : " + str(item["final_url"]))
                     if item.get("metadata_status"):
                         st.warning(item["metadata_status"])
                     if item.get("relevance_reason"):
