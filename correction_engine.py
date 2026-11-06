@@ -226,6 +226,9 @@ def _apply_local_corrections(paragraph):
                 continue
 
             old_text = (paragraph.text or "")[start:end]
+            # Keep sentence-initial capitalization when a local rule matches case-insensitively.
+            if old_text[:1].isupper() and replacement[:1].islower():
+                replacement = replacement[:1].upper() + replacement[1:]
             first_start, first_end, first_run = affected[0]
             local_start = start - first_start
             local_end = min(end, first_end) - first_start
