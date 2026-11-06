@@ -159,6 +159,8 @@ LOCAL_CORRECTION_RULES = (
      "Singular subject requires « becomes »."),
     (r"(?i)\ba\s+manager\s+who\s+want\b", "a manager who wants",
      "Third-person singular subject requires « wants »."),
+    (r"(?i)\bshould\s+listens\b", "should listen",
+     "After the modal « should », use the base verb « listen »."),
     (r"(?i)\bprovides\s+clear\s+instructions\b", "provide clear instructions",
      "After « should », use the base verb « provide »."),
     (r"(?i)\bworkers\s+feels\s+respected\b", "workers feel respected",
