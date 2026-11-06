@@ -202,6 +202,47 @@ class CorrectionEngineTests(unittest.TestCase):
         self.assertEqual(len(changes), 3)
         self.assertEqual(skipped, [])
 
+    @patch("correction_engine.requests.post", return_value=FakeResponse([]))
+    def test_corrects_english_agreement_errors_from_two_page_sample(self, mocked_post):
+        document = Document()
+        cases = [
+            ("education are considered", "education is considered"),
+            ("many children's still does not have", "many children still do not have"),
+            ("useful equipments", "useful equipment"),
+            ("some schools in rural areas does not have", "some schools in rural areas do not have"),
+            ("Teachers also plays", "Teachers also play"),
+            ("A good teacher encourage", "A good teacher encourages"),
+            ("When students feels supported", "When students feel supported"),
+            ("Technology have changed", "Technology has changed"),
+            ("communication skills is very important", "communication skills are very important"),
+            ("employees must knows", "employees must know"),
+            ("Teamwork are", "Teamwork is"),
+            ("teamwork sometimes become difficult", "teamwork sometimes becomes difficult"),
+            ("a manager who want", "a manager who wants"),
+            ("He should listens to their suggestions and provides clear instructions",
+             "He should listen to their suggestions and provide clear instructions"),
+            ("If workers feels respected", "If workers feel respected"),
+            ("development of a country also depend", "development of a country also depends"),
+            ("degrees but does not have", "degrees but do not have"),
+            ("Others wants", "Others want"),
+            ("a young person who have", "a young person who has"),
+            ("starting a business require", "starting a business requires"),
+            ("must study the market, identifies potential customers and calculates their expenses",
+             "must study the market, identify potential customers and calculate their expenses"),
+            ("They should establish priorities, prepares a daily schedule and avoids unnecessary distractions",
+             "They should establish priorities, prepare a daily schedule and avoid unnecessary distractions"),
+        ]
+        for incorrect, expected in cases:
+            document.add_paragraph(incorrect)
+
+        corrected, changes, skipped, detected, suggestions = (
+            correct_docx_with_languagetool(document, "en-US")
+        )
+        self.assertEqual([p.text for p in corrected.paragraphs],
+                         [item[1] for item in cases])
+        self.assertGreaterEqual(len(changes), 20)
+        self.assertEqual(skipped, [])
+
     def test_mictsl_diagnostics_flag_corruption_and_conflicting_cover_titles(self):
         document = Document()
         document.add_paragraph("RAPPORT DE VISITE D’ENTREPRISE")
