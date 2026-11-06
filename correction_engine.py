@@ -467,9 +467,9 @@ def correct_docx_with_languagetool(document, language_code: str):
                     paragraphs.index(owner_for_count[2])
                     if owner_for_count is not None else -1
                 )
-                context_before = re.sub(r"\\s+", " ", text[max(0, offset - 35):offset]).casefold()
+                context_before = re.sub(r"\s+", " ", text[max(0, offset - 35):offset]).casefold()
                 context_after = re.sub(
-                    r"\\s+", " ", text[offset + length:offset + length + 35]
+                    r"\s+", " ", text[offset + length:offset + length + 35]
                 ).casefold()
                 finding_key = (
                     paragraph_index,
