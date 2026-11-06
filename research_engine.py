@@ -238,6 +238,9 @@ def search_bibliography(topic: str, max_results: int = 8):
             term in (title_norm + " " + _normalise(abstract or ""))
             for term in ("madagascar", "malgache", "malagasy")
         )
+        madagascar_title_match = any(
+            term in title_norm for term in ("madagascar", "malgache", "malagasy")
+        )
         other_crop_words = {
             "litchi", "lychee", "vanille", "vanilla", "raphia",
             "cacao", "cocoa", "cafe", "coffee", "poivre", "pepper",
@@ -250,18 +253,21 @@ def search_bibliography(topic: str, max_results: int = 8):
         relevance_group = "A"
         relevance_reason = "Correspondance directe avec le sujet."
         if clove_topic:
-            if other_crop_only or figurative_match:
+            if figurative_match:
                 return
             if clove_match:
-                if madagascar_match:
+                if other_crop_only:
+                    return
+                if madagascar_title_match:
                     relevance_group = "A"
-                    relevance_reason = "Le girofle et Madagascar sont explicitement mentionnés."
+                    relevance_reason = "Le titre porte explicitement sur le girofle à Madagascar."
                 else:
                     relevance_group = "B"
-                    relevance_reason = "Étude sur le girofle dans un autre pays ou sans pays malgache identifié ; utile pour comparaison."
+                    relevance_reason = "Étude sur le girofle à l'international ; utile pour comparaison, même si Madagascar est cité dans le résumé."
             else:
                 # Catégorie C : contexte théorique/économique lié à Madagascar.
-                # Il faut au moins deux axes du sujet pour éviter les faux positifs.
+                # Les autres filières peuvent être utiles ici, mais la notice doit
+                # mentionner Madagascar et au moins deux axes du sujet.
                 topic_axes = {
                     "qualite", "quality", "export", "exportation", "exportations",
                     "competitivite", "competitiveness", "marche", "market",
