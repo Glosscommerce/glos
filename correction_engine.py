@@ -183,6 +183,29 @@ LOCAL_CORRECTION_RULES = (
     (r"(?i)\bthey\s+should\s+establish\s+priorities,\s*prepares\s+a\s+daily\s+schedule\s+and\s+avoids\s+unnecessary\s+distractions\b",
      "they should establish priorities, prepare a daily schedule and avoid unnecessary distractions",
      "Parallel verbs after « should » use the base form."),
+    # CORRECTGLOSS English test: high-confidence spelling and agreement fixes.
+    (r"(?i)\bCOORRECTGLOSS\b", "CORRECTGLOSS",
+     "Correction du nom exact de l’application CORRECTGLOSS."),
+    (r"(?i)\bTechnology\s+have\s+become\b", "Technology has become",
+     "Singular subject « technology » requires « has »."),
+    (r"(?i)\bresearchers\s+faces\b", "researchers face",
+     "Plural subject « researchers » requires « face »."),
+    (r"(?i)\bpeople\s+makes\b", "people make",
+     "Plural subject « people » requires « make »."),
+    (r"(?i)\bThe\s+creations\s+of\s+CORRECTGLOSS\b", "The creation of CORRECTGLOSS",
+     "Use the singular noun « creation » for the project’s origin."),
+    (r"(?i)\bcertain\s+tools\s+focuses\b", "certain tools focus",
+     "Plural subject « tools » requires « focus »."),
+    (r"(?i)\bInstead\s+of\s+use\b", "Instead of using",
+     "The preposition « instead of » is followed by a gerund."),
+    (r"(?i)\bautomatic\s+systems\s+does\b", "automatic systems do",
+     "Plural subject « systems » requires « do »."),
+    (r"(?i)\band\s+encourages\s+people\s+to\s+use\s+the\s+application\s+regularly\b",
+     "and encourage people to use the application regularly",
+     "Parallel verbs after « can » use the base form."),
+    (r"(?i)\bStreamlet\b", "Streamlit",
+     "Correction du nom de la plateforme Python Streamlit."),
+
 )
 
 
