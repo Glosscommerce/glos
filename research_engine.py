@@ -369,7 +369,9 @@ def search_bibliography(topic: str, max_results: int = 8):
 
             quality_terms = {
                 "qualite", "quality", "qualitative", "purity", "moisture",
-                "humidite", "huile", "oil", "eugenol", "aroma"
+                "humidite", "grade", "grading", "standard", "standards",
+                "norme", "normes", "contaminant", "contamination",
+                "residue", "residus", "teneur"
             }
             export_terms = {
                 "export", "exportation", "exportations", "exporter",
