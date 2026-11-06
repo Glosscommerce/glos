@@ -125,8 +125,8 @@ def _verify_reference_link(url, doi=None):
     """Compatibilité : renvoie un libellé court pour les anciennes interfaces."""
     details = _check_link_details(url, doi)
     return {
-        "pdf": "PDF accessible (gratuité non confirmée)",
-        "page": "page accessible (PDF non confirmé)",
+        "pdf": "Le serveur indique un PDF — ouverture dans le navigateur non garantie",
+        "page": "le serveur répond — ouverture dans le navigateur non garantie",
         "blocked": "accès bloqué au vérificateur",
         "dead": "lien probablement indisponible",
         "server_error": "erreur du serveur distant",
@@ -218,8 +218,8 @@ def search_web(query: str, max_results: int = 8):
         item.update({
             "link_status": link_check["status"],
             "link_label": {
-                "pdf": "PDF accessible (gratuité non confirmée)",
-                "page": "Page accessible (PDF non confirmé)",
+                "pdf": "Le serveur indique un PDF — ouverture dans le navigateur non garantie",
+                "page": "Le serveur répond — ouverture dans le navigateur non garantie",
                 "blocked": "Vérification bloquée — ouvrir dans le navigateur",
                 "dead": "Lien probablement indisponible",
                 "server_error": "Erreur du serveur distant",
@@ -450,8 +450,8 @@ def search_bibliography(topic: str, max_results: int = 8):
             details.append("Résumé : " + re.sub(r"\s+", " ", str(abstract))[:650])
         link_check = _check_link_details(url, doi)
         short_link_status = {
-            "pdf": "PDF accessible (gratuité non confirmée)",
-            "page": "page accessible (PDF non confirmé)",
+            "pdf": "Le serveur indique un PDF — ouverture dans le navigateur non garantie",
+            "page": "le serveur répond — ouverture dans le navigateur non garantie",
             "blocked": "accès bloqué au vérificateur",
             "dead": "lien probablement indisponible",
             "server_error": "erreur du serveur distant",
@@ -466,8 +466,8 @@ def search_bibliography(topic: str, max_results: int = 8):
             "doi_status": doi_status, "source_status": source_status,
             "link_status": link_check["status"],
             "link_label": {
-                "pdf": "PDF accessible (gratuité non confirmée)",
-                "page": "Page accessible (PDF non confirmé)",
+                "pdf": "Le serveur indique un PDF — ouverture dans le navigateur non garantie",
+                "page": "Le serveur répond — ouverture dans le navigateur non garantie",
                 "blocked": "Vérification bloquée — ouvrir dans le navigateur",
                 "dead": "Lien probablement indisponible",
                 "server_error": "Erreur du serveur distant",
