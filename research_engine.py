@@ -105,12 +105,16 @@ def _openalex_abstract(inverted_index):
 def _topic_queries(topic):
     """Variantes courtes pour récupérer des publications utilisant d'autres termes."""
     variants = [topic]
-    terms = list(_terms(topic))
-    if any(x in terms for x in {"girofle", "clou", "cloves", "clove"}):
+    # Ordre déterministe : _terms() renvoie un set et ne doit pas décider
+    # aléatoirement des requêtes envoyées aux catalogues.
+    terms = set(_normalise(topic).split())
+    if terms & {"girofle", "clou", "cloves", "clove"}:
         variants.extend([
             "clove quality Madagascar export competitiveness",
             "Madagascar clove value chain quality export",
-            "filière girofle Madagascar qualité exportation"
+            "filière girofle Madagascar qualité exportation",
+            "Madagascar agricultural product quality export competitiveness",
+            "Madagascar agricultural value chains export market competitiveness"
         ])
     return list(dict.fromkeys(variants))
 
@@ -220,48 +224,68 @@ def search_bibliography(topic: str, max_results: int = 8):
         if not title or not url:
             return
         score = _relevance(topic, title, abstract or "", url)
-        title_body = _terms(title + " " + (abstract or ""))
+        title_terms = _terms(title)
+        abstract_terms = _terms(abstract or "")
+        title_body = title_terms | abstract_terms
         topic_terms = _terms(topic)
-        # Pour un sujet centré sur le girofle, éviter les mémoires sur des filières
-        # sans lien identifiable avec le girofle/clove.
         clove_topic = bool(topic_terms & {"girofle", "clove", "cloves"})
         clove_words = {"girofle", "clove", "cloves", "syzygium", "aromaticum"}
         clove_match = bool(title_body & clove_words)
+        abstract_clove_match = bool(abstract_terms & clove_words)
         topic_norm = _normalise(topic)
         title_norm = _normalise(title)
-        # Si le sujet porte explicitement sur Madagascar, ne pas confondre
-        # les études indonésiennes ou d'autres pays avec le cas malgache.
-        madagascar_topic = "madagascar" in topic_norm or "malgache" in topic_norm
-        madagascar_match = any(term in (title_norm + " " + _normalise(abstract or ""))
-                               for term in ("madagascar", "malgache", "malagasy"))
-        # Écarter les travaux consacrés à une autre filière (litchi, vanille,
-        # raphia...) même s'ils parlent aussi d'exportation et de qualité.
+        madagascar_match = any(
+            term in (title_norm + " " + _normalise(abstract or ""))
+            for term in ("madagascar", "malgache", "malagasy")
+        )
         other_crop_words = {
             "litchi", "lychee", "vanille", "vanilla", "raphia",
-            "cacao", "cocoa", "cafe", "coffee", "poivre", "pepper"
+            "cacao", "cocoa", "cafe", "coffee", "poivre", "pepper",
+            "cranberry", "crab", "citrus", "cinnamon"
         }
         other_crop_only = bool(title_body & other_crop_words) and not bool(
-            _terms(title) & clove_words
+            title_terms & clove_words
         )
-        # Écarter les faux positifs où « clous de girofle » est une expression
-        # figurée sans rapport avec la filière agricole (ex. gaullisme).
-        figurative_terms = {"gaullisme", "gaulliste"}
-        figurative_match = bool(title_body & figurative_terms)
-        # Pour un sujet centré sur le girofle, la notice doit parler explicitement
-        # du girofle/clove (dans le titre ou le résumé). Un simple mot commun comme
-        # « qualité », « exportation » ou « compétitivité » ne suffit pas.
+        figurative_match = bool(title_body & {"gaullisme", "gaulliste"})
+        relevance_group = "A"
+        relevance_reason = "Correspondance directe avec le sujet."
         if clove_topic:
-            if not clove_match or other_crop_only or figurative_match:
+            if other_crop_only or figurative_match:
                 return
-        # Pour le girofle, l'absence des mots « qualité », « exportation » ou
-        # « compétitivité » dans le titre/résumé ne suffit pas à rejeter une source :
-        # certains travaux portent sur la filière, la production ou les propriétés
-        # du clou de girofle. Le lien direct est établi par la mention explicite
-        # du girofle/clove, tandis que la pertinence est évaluée avec un seuil adapté.
-        # Les autres filières et les emplois figurés restent exclus ci-dessus.
-        minimum_score = 0.08 if clove_topic else 0.20
+            if clove_match:
+                if madagascar_match:
+                    relevance_group = "A"
+                    relevance_reason = "Le girofle et Madagascar sont explicitement mentionnés."
+                else:
+                    relevance_group = "B"
+                    relevance_reason = "Étude sur le girofle dans un autre pays ou sans pays malgache identifié ; utile pour comparaison."
+            else:
+                # Catégorie C : contexte théorique/économique lié à Madagascar.
+                # Il faut au moins deux axes du sujet pour éviter les faux positifs.
+                topic_axes = {
+                    "qualite", "quality", "export", "exportation", "exportations",
+                    "competitivite", "competitiveness", "marche", "market",
+                    "filiere", "value", "chain", "commerce", "trade"
+                }
+                axis_hits = title_body & topic_axes
+                if not madagascar_match or len(axis_hits) < 2:
+                    return
+                relevance_group = "C"
+                relevance_reason = "Source connexe sur Madagascar et plusieurs axes qualité/export/compétitivité, sans mention directe du girofle."
+        minimum_score = 0.08 if clove_topic and relevance_group in {"A", "B"} else 0.12
         if score < minimum_score:
             return
+        # Détecter les notices dont le titre et le résumé semblent parler de sujets différents.
+        abstract_crop_mismatch = (
+            clove_match
+            and bool(abstract_terms & other_crop_words)
+            and not abstract_clove_match
+        )
+        metadata_status = (
+            "À vérifier : le résumé contient des mots-clés d'une autre filière que le titre."
+            if abstract_crop_mismatch else
+            "Notice à vérifier auprès de la source originale."
+        )
         key = (category, _normalise(title))
         if key in seen:
             return
@@ -281,6 +305,9 @@ def search_bibliography(topic: str, max_results: int = 8):
             "url": url, "type": work_type or "publication",
             "provider": provider, "relevance": round(score, 2), "doi": doi,
             "doi_status": doi_status, "source_status": source_status,
+            "relevance_group": relevance_group,
+            "relevance_reason": relevance_reason,
+            "metadata_status": metadata_status,
             "snippet": " | ".join(details),
         }
         output[category].append(reference)
@@ -304,13 +331,14 @@ def search_bibliography(topic: str, max_results: int = 8):
                     "title": reference["title"], "year": year,
                     "category": category, "url": url, "doi": doi,
                     "provider": provider, "type": work_type or "publication",
+                    "relevance_group": relevance_group,
                 })
 
     # Requêtes courtes complémentaires : le titre d'un livre n'emploie pas toujours
     # les mêmes mots que le sujet exact du mémoire.
     queries = _topic_queries(topic)
     # OpenAlex : catalogue ouvert de publications et de chercheurs.
-    for search_term in queries[:2]:
+    for search_term in queries[:5]:
         try:
             response = session.get(
                 "https://api.openalex.org/works",
@@ -447,8 +475,12 @@ def search_bibliography(topic: str, max_results: int = 8):
     # Les mémoires et thèses sont déjà classés dans la recherche OpenAlex générale.
     # Éviter un appel OpenAlex supplémentaire qui augmente le risque de HTTP 429.
 
+    group_order = {"A": 0, "B": 1, "C": 2}
     for category in ("Articles scientifiques", "Livres", "Documents, mémoires et thèses"):
-        output[category].sort(key=lambda x: x.get("relevance", 0), reverse=True)
+        output[category].sort(
+            key=lambda x: (group_order.get(x.get("relevance_group", "C"), 9),
+                           -x.get("relevance", 0))
+        )
         output[category] = output[category][:limit]
     output["Auteurs et chercheurs"] = output["Auteurs et chercheurs"][:limit * 2]
     output["_diagnostics"] = errors
