@@ -98,6 +98,12 @@ if bibliography:
             "B": ("B — Références comparatives", "Travaux qui mentionnent le Tsaboraha, mais dont le lien spécifique avec les Betsimisaraka doit être confirmé."),
             "C": ("C — Références connexes", "Travaux sur les rites, coutumes et traditions Betsimisaraka ; ils apportent un contexte culturel sans traiter nécessairement du Tsaboraha."),
         }
+    elif any(term in current_topic for term in ("girofle", "clove", "cloves")):
+        group_details = {
+            "A": ("A — Références directes", "Girofle malgache avec des éléments explicites sur la qualité ET l’exportation/compétitivité."),
+            "B": ("B — Références sur le girofle", "Études sur le girofle ou la filière malgache, sans couvrir explicitement tous les axes du sujet."),
+            "C": ("C — Références contextuelles", "Sources utiles sur la qualité, les marchés ou l’exportation à Madagascar, sans mention explicite du girofle."),
+        }
     else:
         group_details = {
             "A": ("A — Références directes", "Travaux correspondant directement aux termes distinctifs du sujet."),
