@@ -135,134 +135,42 @@ with st.form("cg_prepare_writing_form"):
     writing_submit = st.form_submit_button("Préparer ma rédaction", type="primary")
 
 def cg_build_writing_outline(subject, kind, level, lang, instructions, full_draft):
-    """Build a free, editable writing framework; never invent facts or references."""
+    """Create a substantive editable starter draft without inventing research evidence."""
     fr = lang == "Français"
-    fill = (
-        "[À compléter avec vos idées, vos informations et vos sources vérifiées.]"
-        if fr else
-        "[Complete with your own ideas, information and verified sources.]"
-    )
-    if fr:
-        common_guides = [
-            "Quel est le contexte du sujet et pourquoi est-il important ?",
-            "Quel problème précis voulez-vous étudier ou expliquer ?",
-            "Quels arguments, données ou exemples vérifiables pouvez-vous présenter ?",
-            "Que retenez-vous de votre analyse et quelles sont ses limites ?",
+    subject = re.sub(r"\\s+", " ", str(subject or "")).strip(" .;:")
+    clove = any(x in subject.lower() for x in ("girofle", "clove"))
+    if fr and kind == "Mémoire / Projet de recherche":
+        if clove:
+            context = "Le girofle représente un produit agricole commercialisé sur les marchés internationaux. Dans le contexte malgache, son étude présente un intérêt pour comprendre les relations entre production, collecte, préparation, contrôle de la qualité et exportation. La qualité peut influencer l’acceptation des lots, la satisfaction des acheteurs et la continuité des relations commerciales. Ces éléments devront être documentés à l’aide de statistiques récentes et de sources professionnelles vérifiables."
+            scope = "Le présent projet porte sur « " + subject + " ». Le terrain envisagé est constitué des exportateurs de girofle établis à Toamasina. L’étude examinera les critères de qualité appliqués au produit destiné à l’exportation, les pratiques de contrôle et de conservation, ainsi que les contraintes rencontrées par les opérateurs. La période étudiée et les entreprises participantes seront précisées après vérification de l’accès au terrain."
+            problem = "La compétitivité à l’exportation ne dépend pas uniquement du prix. Elle peut également être liée à la conformité du produit aux spécifications des acheteurs, à la régularité de la qualité, à la traçabilité, au conditionnement et au respect des délais. La question centrale est donc la suivante : dans quelle mesure la qualité du girofle malgache influence-t-elle la compétitivité des exportateurs de Toamasina sur les marchés internationaux ?"
+            questions = ["Quels critères de qualité les acheteurs exigent-ils pour le girofle destiné à l’exportation ?", "Quelles pratiques les exportateurs de Toamasina utilisent-ils pour contrôler et préserver cette qualité ?", "Quelles contraintes limitent la conformité du produit aux exigences des marchés ?", "Comment l’amélioration de la gestion de la qualité pourrait-elle renforcer la compétitivité des exportateurs ?"]
+            hypotheses = ["H1 : Le respect régulier des critères de qualité exigés par les acheteurs favorise le maintien des relations commerciales.", "H2 : Les insuffisances de contrôle, de stockage ou de traçabilité peuvent réduire la conformité des lots.", "H3 : Le renforcement des procédures de contrôle qualité pourrait améliorer la performance commerciale. Ces hypothèses restent à vérifier sur le terrain."]
+            theory = ["La qualité sera étudiée comme l’ensemble des caractéristiques permettant au produit de répondre à des exigences définies. Les dimensions à examiner pourront inclure l’état physique, la propreté, l’humidité, l’homogénéité, le stockage, le conditionnement et la conformité aux spécifications contractuelles. Les seuils précis devront provenir de normes ou de documents techniques vérifiés.", "La compétitivité à l’exportation désigne la capacité d’un opérateur à maintenir durablement ses ventes sur les marchés extérieurs. Elle pourra être examinée à travers la conformité des livraisons, la fidélisation des clients, la régularité des commandes, les prix obtenus et les volumes exportés, selon les données réellement disponibles.", "La gestion de la qualité, la chaîne de valeur et les théories du commerce international pourront servir de cadres d’analyse. Les auteurs et modèles retenus seront présentés après consultation d’ouvrages et d’articles scientifiques réellement accessibles et vérifiés.", "Le terrain de Toamasina sera décrit à partir de documents officiels et d’informations recueillies auprès des acteurs concernés. Les volumes, destinations et caractéristiques de la filière ne seront pas estimés sans source."]
+        else:
+            context = "Le sujet « " + subject + " » s’inscrit dans un contexte qui mérite une analyse scientifique afin de comprendre le phénomène étudié, ses facteurs explicatifs et ses conséquences. L’intérêt de la recherche est de produire une analyse structurée, fondée sur des concepts clairement définis et des informations vérifiables."
+            scope = "L’étude devra être délimitée selon trois dimensions : le lieu, la période et la population concernée. Ces limites permettront de préciser les observations possibles et d’éviter des conclusions trop générales. Le terrain et les participants seront décrits à partir des informations effectivement obtenues."
+            problem = "La problématique consiste à comprendre les mécanismes qui relient les différentes dimensions du sujet « " + subject + " ». La question centrale devra être formulée de manière précise, neutre et vérifiable ; elle guidera le choix des concepts, des variables, des outils de collecte et des méthodes d’analyse."
+            questions = ["Quelle est la situation actuelle du phénomène étudié sur le terrain retenu ?", "Quels facteurs peuvent expliquer les évolutions ou difficultés observées ?", "Quelles conséquences ces facteurs ont-ils pour les acteurs concernés ?", "Quelles actions pourraient être proposées à partir des résultats ?"]
+            hypotheses = ["H1 : Le phénomène étudié est associé à plusieurs facteurs qu’il faudra identifier sur le terrain.", "H2 : Les pratiques des acteurs et les ressources disponibles peuvent influencer les résultats observés.", "H3 : Des mesures adaptées au contexte pourraient contribuer à améliorer la situation. Ces hypothèses sont provisoires."]
+            theory = ["Le cadre conceptuel définira les notions centrales à partir de références scientifiques et institutionnelles, puis précisera leurs dimensions observables.", "Le cadre théorique présentera les approches permettant d’interpréter le phénomène. Chaque théorie devra être justifiée par son lien avec la problématique.", "La revue des travaux antérieurs permettra de comparer les connaissances disponibles et d’identifier la contribution attendue de cette recherche."]
+        sections = [
+            ("INTRODUCTION GÉNÉRALE", [context, scope, problem, "Questions de recherche : " + " ".join(questions), "Hypothèses provisoires : " + " ".join(hypotheses), "Objectif général : analyser le sujet dans le terrain retenu. Objectifs spécifiques : définir les concepts, décrire les pratiques des acteurs, identifier les facteurs explicatifs, analyser les données et formuler des recommandations.", "Annonce du plan : la première partie présente le cadre conceptuel et théorique ; la deuxième expose la méthodologie ; la troisième présente et discute les résultats."]),
+            ("PARTIE I — CADRE CONCEPTUEL ET THÉORIQUE", theory + ["La revue de littérature sera organisée par concepts, théories et résultats de recherches antérieures. Toute idée empruntée devra être accompagnée d’une citation vérifiable.", "La présentation du secteur ou du terrain précisera les acteurs, les activités et les caractéristiques utiles, à partir de documents fiables."]),
+            ("PARTIE II — CADRE MÉTHODOLOGIQUE", ["La recherche adoptera une démarche descriptive et analytique. Une approche qualitative, quantitative ou mixte sera choisie selon la question de recherche et l’accès réel aux données.", "La population sera constituée des acteurs directement concernés. L’échantillon sera défini selon des critères explicites : fonction, expérience, disponibilité et lien avec le sujet. Le nombre de participants sera fixé après évaluation de l’accès au terrain.", "Les données primaires pourront être recueillies par entretiens semi-directifs, questionnaires et observations. Les données secondaires pourront provenir de rapports, statistiques, textes officiels et publications dont l’origine et la date auront été vérifiées.", "Les réponses qualitatives seront classées par thèmes. Les données quantitatives disponibles seront présentées dans des tableaux et indicateurs adaptés. Les limites possibles concernent l’accès au terrain, la disponibilité des données, la taille de l’échantillon et la confidentialité."]),
+            ("PARTIE III — RÉSULTATS, ANALYSE ET DISCUSSION", ["Cette partie sera rédigée après la collecte. Elle présentera les participants, les données recueillies et les résultats organisés selon les objectifs spécifiques.", "L’analyse reliera chaque observation à la problématique et au cadre théorique. Toute interprétation devra s’appuyer sur un entretien, un questionnaire, une observation ou un document vérifiable.", "La discussion déterminera si les résultats confirment, nuancent ou rejettent les hypothèses. Aucun résultat empirique ne doit être inventé.", "Les recommandations découleront des difficultés réellement constatées et préciseront les acteurs concernés ainsi que les actions envisageables."]),
+            ("CONCLUSION GÉNÉRALE", ["La conclusion rappellera la problématique, les objectifs et la démarche, puis présentera les principaux résultats effectivement établis et répondra à la question centrale.", "Les limites de l’étude seront exposées avec transparence : terrain, échantillon, période et disponibilité des données.", "Les perspectives pourront proposer un élargissement du terrain, une comparaison avec d’autres acteurs ou l’approfondissement d’une dimension insuffisamment documentée."]),
+            ("BIBLIOGRAPHIE ET ANNEXES", ["La bibliographie comprendra uniquement les documents réellement consultés : ouvrages, articles scientifiques, rapports institutionnels, textes officiels et ressources en ligne. Chaque référence devra être vérifiable et respecter la norme exigée par l’établissement.", "Les annexes pourront contenir le questionnaire, le guide d’entretien, les tableaux autorisés et les documents utiles. Les informations confidentielles devront être anonymisées ou utilisées avec autorisation."])
         ]
-        sections_by_kind = {
-            "Dissertation": [
-                ("INTRODUCTION", ["Accroche et présentation du sujet", "Définition des termes essentiels", "Délimitation du sujet", "Problématique", "Annonce du plan"]),
-                ("DÉVELOPPEMENT", ["I. Premier axe : première idée et arguments", "II. Deuxième axe : analyse et exemples", "III. Troisième axe : discussion ou ouverture (si nécessaire)"]),
-                ("CONCLUSION", ["Bilan des arguments", "Réponse claire à la problématique", "Ouverture (facultative)"]),
-                ("SOURCES ET RÉFÉRENCES", ["Indiquez uniquement les sources réellement consultées."]),
-            ],
-            "Exposé": [
-                ("INTRODUCTION", ["Présentation du thème", "Contexte et intérêt", "Objectif de l’exposé", "Annonce des parties"]),
-                ("DÉVELOPPEMENT", ["I. Présentation des notions essentielles", "II. Explications, arguments et exemples", "III. Résultats ou points à retenir"]),
-                ("CONCLUSION", ["Résumé des idées essentielles", "Conclusion générale", "Question d’ouverture (facultative)"]),
-                ("SOURCES", ["Livres, articles, rapports et sites réellement consultés."]),
-            ],
-            "Rapport": [
-                ("INTRODUCTION", ["Présentation de l’organisme ou du contexte", "Contexte et justification du rapport", "Objectifs du rapport", "Annonce du plan"]),
-                ("MÉTHODOLOGIE", ["Période et lieu", "Méthodes de collecte des informations", "Outils utilisés et limites"]),
-                ("ACTIVITÉS ET OBSERVATIONS", ["Activités réalisées", "Description des méthodes", "Difficultés rencontrées et solutions"]),
-                ("RÉSULTATS ET DISCUSSION", ["Résultats observés", "Analyse des résultats", "Limites et enseignements"]),
-                ("CONCLUSION ET RECOMMANDATIONS", ["Bilan", "Recommandations réalistes", "Perspectives"]),
-                ("SOURCES ET ANNEXES", ["Sources réellement consultées et documents annexés avec autorisation."]),
-            ],
-            "Mémoire / Projet de recherche": [
-                ("INTRODUCTION GÉNÉRALE", ["Contexte et justification du sujet", "Présentation du sujet et délimitation", "Problématique", "Questions de recherche", "Hypothèses (si pertinentes)", "Objectif général et objectifs spécifiques", "Annonce du plan"]),
-                ("PARTIE I — CADRE CONCEPTUEL ET THÉORIQUE", ["Définitions des concepts clés", "Théories et travaux antérieurs", "Présentation du terrain ou du secteur étudié"]),
-                ("PARTIE II — CADRE MÉTHODOLOGIQUE", ["Type de recherche et approche", "Population, échantillon et terrain", "Techniques de collecte des données", "Méthodes d’analyse et limites"]),
-                ("PARTIE III — RÉSULTATS, ANALYSE ET DISCUSSION", ["Présentation des résultats réels", "Analyse en lien avec les objectifs", "Discussion des hypothèses", "Suggestions ou recommandations"]),
-                ("CONCLUSION GÉNÉRALE", ["Synthèse", "Réponse à la problématique", "Limites de l’étude", "Perspectives"]),
-                ("BIBLIOGRAPHIE ET ANNEXES", ["Références vérifiables selon les normes demandées par l’établissement."]),
-            ],
-            "Lettre": [
-                ("EN-TÊTE", ["Lieu et date", "Coordonnées de l’expéditeur", "Coordonnées du destinataire"]),
-                ("OBJET", ["Objet précis de la lettre"]),
-                ("CORPS DE LA LETTRE", ["Formule d’appel", "Motif et contexte", "Demande ou message principal", "Informations utiles et pièces jointes"]),
-                ("FORMULE FINALE", ["Formule de politesse adaptée", "Signature et nom"]),
-            ],
-            "Article": [
-                ("TITRE ET CHAPÔ", ["Titre précis", "Résumé bref de l’idée principale"]),
-                ("INTRODUCTION", ["Présentation du sujet", "Angle choisi et objectif"]),
-                ("DÉVELOPPEMENT", ["I. Première idée et éléments vérifiables", "II. Analyse, exemples ou témoignages autorisés", "III. Enjeux et perspectives"]),
-                ("CONCLUSION", ["Idée essentielle à retenir", "Ouverture éventuelle"]),
-                ("SOURCES", ["Sources réellement consultées et vérifiables."]),
-            ],
-        }
-        guide_title = "QUESTIONS POUR VOUS GUIDER"
+    elif fr:
+        sections = [("INTRODUCTION", ["Le présent document porte sur « " + subject + " ». Il vise à présenter le sujet, son contexte et son intérêt. Les informations factuelles devront être appuyées par des sources vérifiées.", "La réflexion sera organisée autour des idées principales et des objectifs du document."]), ("DÉVELOPPEMENT", ["Premièrement, les notions essentielles et le contexte seront présentés à partir de références fiables.", "Deuxièmement, les arguments seront développés et illustrés par des exemples vérifiables.", "Enfin, les observations seront discutées en tenant compte des limites des informations disponibles."]), ("CONCLUSION", ["La conclusion synthétisera les arguments et formulera une réponse cohérente avec les éléments présentés."]), ("SOURCES", ["Ajouter uniquement les références effectivement consultées et vérifiées."])]
     else:
-        common_guides = [
-            "What is the context of the topic, and why is it important?",
-            "What specific problem do you want to study or explain?",
-            "Which verifiable arguments, data or examples can you present?",
-            "What does your analysis show, and what are its limitations?",
-        ]
-        sections_by_kind = {
-            "Dissertation": [
-                ("INTRODUCTION", ["Opening and presentation of the topic", "Definition of key terms", "Scope of the topic", "Problem statement", "Outline of the paper"]),
-                ("MAIN BODY", ["I. First main point and supporting arguments", "II. Second main point, analysis and examples", "III. Further discussion or perspective (if needed)"]),
-                ("CONCLUSION", ["Summary of the arguments", "Clear answer to the problem statement", "Optional broader perspective"]),
-                ("SOURCES AND REFERENCES", ["List only sources you actually consulted."]),
-            ],
-            "Exposé": [
-                ("INTRODUCTION", ["Presentation of the topic", "Background and relevance", "Purpose of the presentation", "Outline"]),
-                ("MAIN BODY", ["I. Key concepts", "II. Explanations, arguments and examples", "III. Findings or key points"]),
-                ("CONCLUSION", ["Summary of the main ideas", "Final conclusion", "Optional opening question"]),
-                ("SOURCES", ["Books, articles, reports and websites actually consulted."]),
-            ],
-            "Rapport": [
-                ("INTRODUCTION", ["Organization or context", "Background and rationale", "Report objectives", "Outline"]),
-                ("METHODOLOGY", ["Period and location", "Information-gathering methods", "Tools used and limitations"]),
-                ("ACTIVITIES AND OBSERVATIONS", ["Activities completed", "Methods observed", "Difficulties and solutions"]),
-                ("FINDINGS AND DISCUSSION", ["Actual findings", "Analysis", "Limitations and lessons learned"]),
-                ("CONCLUSION AND RECOMMENDATIONS", ["Overall assessment", "Practical recommendations", "Future perspectives"]),
-                ("SOURCES AND APPENDICES", ["Sources actually consulted and authorized appendices."]),
-            ],
-            "Mémoire / Projet de recherche": [
-                ("GENERAL INTRODUCTION", ["Background and rationale", "Topic and scope", "Problem statement", "Research questions", "Hypotheses (if relevant)", "General and specific objectives", "Outline"]),
-                ("PART I — CONCEPTUAL AND THEORETICAL FRAMEWORK", ["Key concept definitions", "Theories and previous studies", "Research field or sector"]),
-                ("PART II — METHODOLOGICAL FRAMEWORK", ["Research design and approach", "Population, sample and field", "Data collection methods", "Analysis methods and limitations"]),
-                ("PART III — FINDINGS, ANALYSIS AND DISCUSSION", ["Actual findings", "Analysis linked to objectives", "Discussion of hypotheses", "Recommendations"]),
-                ("GENERAL CONCLUSION", ["Summary", "Answer to the problem statement", "Study limitations", "Future perspectives"]),
-                ("REFERENCES AND APPENDICES", ["Verifiable references using the institution's required style."]),
-            ],
-            "Lettre": [
-                ("HEADER", ["Place and date", "Sender's details", "Recipient's details"]),
-                ("SUBJECT", ["Clear subject line"]),
-                ("BODY", ["Appropriate greeting", "Reason and context", "Main request or message", "Relevant details and attachments"]),
-                ("CLOSING", ["Appropriate closing", "Signature and name"]),
-            ],
-            "Article": [
-                ("TITLE AND SUMMARY", ["Specific title", "Brief statement of the main idea"]),
-                ("INTRODUCTION", ["Topic presentation", "Chosen angle and purpose"]),
-                ("MAIN BODY", ["I. First idea and verifiable evidence", "II. Analysis, examples or authorized testimony", "III. Issues and perspectives"]),
-                ("CONCLUSION", ["Main takeaway", "Optional perspective"]),
-                ("SOURCES", ["Sources actually consulted and verifiable."]),
-            ],
-        }
-
-    sections = sections_by_kind.get(kind, sections_by_kind["Dissertation"])
-    lines = [
-        ("TITLE", subject),
-        ("Type", kind),
-        ("Level", level),
-        ("Language", lang),
-    ]
+        sections = [("INTRODUCTION", ["This document examines “" + subject + "”, introduces its context and explains its relevance. Claims must be supported by verified sources."]), ("MAIN DISCUSSION", ["Define the key concepts using reliable sources.", "Explain the main factors and compare relevant perspectives.", "Present findings only after collecting and checking evidence."]), ("METHODOLOGY", ["Describe the research design, population, sampling criteria, data collection tools and analysis methods. Do not report fieldwork that has not taken place."]), ("CONCLUSION", ["Summarize verified findings, answer the research question and state the study limitations."]), ("REFERENCES", ["Include only sources actually consulted and verified."])]
     if instructions.strip():
-        lines.append(("Consignes particulières" if fr else "Special instructions", instructions.strip()))
-
-    for heading, prompts in sections:
-        body_parts = []
-        for prompt in prompts:
-            body_parts.extend([prompt, fill])
-        lines.append((heading, "\n".join(body_parts)))
-
+        sections.insert(0, ("CONSIGNES PARTICULIÈRES" if fr else "SPECIAL INSTRUCTIONS", [instructions.strip()]))
     if not full_draft:
-        lines.append((guide_title, "\n".join(common_guides)))
-    return lines
+        sections.append(("QUESTIONS POUR VOUS GUIDER", ["Quelle question précise le document traite-t-il ?", "Quelles informations sont vérifiées et quelles données restent à collecter ?", "Les conclusions répondent-elles aux objectifs annoncés ?"] if fr else ["What specific question does the document address?", "Which information is verified and what data remains to be collected?", "Do the conclusions answer the stated objectives?"]))
+    return [("TITLE", subject), ("Type", kind), ("Level", level), ("Language", lang)] + sections
 
 if writing_submit:
     if not writing_subject.strip():
