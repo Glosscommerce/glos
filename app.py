@@ -52,7 +52,63 @@ if "cg_session_logged" not in st.session_state:
     log_app_event("app_open")
     st.session_state["cg_session_logged"] = True
 
+
 st.caption("Diagnostic Supabase : " + st.session_state.get("cg_supabase_log_status", "Aucun événement envoyé"))
+
+# Espace administrateur protégé par un mot de passe stocké dans Streamlit Secrets.
+with st.expander("🔐 Dashboard administrateur", expanded=False):
+    admin_password = _cg_secret("ADMIN_PASSWORD")
+    if not admin_password:
+        st.warning("Configurez ADMIN_PASSWORD dans les Secrets Streamlit.")
+    else:
+        entered_password = st.text_input("Mot de passe administrateur", type="password", key="cg_admin_password")
+        if st.button("Accéder au dashboard", key="cg_admin_login"):
+            import hmac
+            st.session_state["cg_admin_authenticated"] = hmac.compare_digest(
+                entered_password, admin_password
+            )
+        if st.session_state.get("cg_admin_authenticated", False):
+            st.subheader("Statistiques CORRECTGLOSS")
+            supabase_url = _cg_secret("SUPABASE_URL").rstrip("/")
+            supabase_key = _cg_secret("SUPABASE_ANON_KEY")
+            try:
+                stats_response = requests.get(
+                    f"{supabase_url}/rest/v1/app_events",
+                    headers={
+                        "apikey": supabase_key,
+                        "Authorization": f"Bearer {supabase_key}",
+                        "Accept": "application/json",
+                        "Prefer": "count=exact",
+                        "Range": "0-999",
+                    },
+                    params={"select": "event_name,app_version,created_at", "order": "created_at.desc"},
+                    timeout=15,
+                )
+                stats_response.raise_for_status()
+                events = stats_response.json()
+                total_events = len(events)
+                event_counts = {}
+                for event in events:
+                    name = event.get("event_name") or "inconnu"
+                    event_counts[name] = event_counts.get(name, 0) + 1
+                metric_cols = st.columns(3)
+                metric_cols[0].metric("Événements récupérés", total_events)
+                metric_cols[1].metric("Ouvertures app_open", event_counts.get("app_open", 0))
+                metric_cols[2].metric("Analyses document", event_counts.get("document_analyzed", 0))
+                if event_counts:
+                    st.dataframe(
+                        [{"Événement": name, "Nombre": count} for name, count in sorted(event_counts.items())],
+                        use_container_width=True, hide_index=True,
+                    )
+                else:
+                    st.info("Aucun événement disponible pour le moment.")
+                st.caption("Affichage limité aux 1 000 derniers événements récupérés. app_open compte les sessions, pas les personnes uniques.")
+            except requests.RequestException as exc:
+                detail = getattr(getattr(exc, "response", None), "text", "") or str(exc)
+                st.error("Lecture des statistiques refusée par Supabase ou indisponible : " + detail[:250])
+                st.info("Aza manokatra SELECT public amin'ny app_events. Mila endpoint/RPC administrateur voaaro isika raha voasakan'ny RLS.")
+        elif entered_password:
+            st.error("Mot de passe administrateur incorrect.")
 
 
 def add_word_toc(document):
