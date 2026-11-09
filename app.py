@@ -13,22 +13,45 @@ st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
 st.title("📘 CORRECTGLOSS")
 st.caption("Correction • reformulation académique • mise en page • contrôle des citations")
 
-def log_app_event(event_type):
-    url = os.getenv("SUPABASE_URL", "").rstrip("/")
-    anon = os.getenv("SUPABASE_ANON_KEY", "")
-    if not url or not anon:
-        return
+def _cg_secret(name):
+    # Streamlit Cloud Secrets are exposed through st.secrets, not necessarily os.environ.
     try:
-        requests.post(f"{url}/rest/v1/app_events",
-            headers={"apikey": anon, "Authorization": f"Bearer {anon}",
-                     "Content-Type": "application/json", "Prefer": "return=minimal"},
-            json={"event_name": event_type, "app_version": "0.4"}, timeout=5).raise_for_status()
+        value = st.secrets.get(name, "")
+        if value:
+            return str(value).strip()
     except Exception:
         pass
+    return os.getenv(name, "").strip()
+
+
+def log_app_event(event_type):
+    url = _cg_secret("SUPABASE_URL").rstrip("/")
+    publishable_key = _cg_secret("SUPABASE_ANON_KEY")
+    if not url or not publishable_key:
+        st.session_state["cg_supabase_log_status"] = "Secrets tsy hita"
+        return
+    try:
+        response = requests.post(
+            f"{url}/rest/v1/app_events",
+            headers={
+                "apikey": publishable_key,
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+            json={"event_name": event_type, "app_version": "0.4"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        st.session_state["cg_supabase_log_status"] = "Connexion réussie"
+    except requests.RequestException as exc:
+        detail = getattr(getattr(exc, "response", None), "text", "") or str(exc)
+        st.session_state["cg_supabase_log_status"] = f"Erreur Supabase: {detail[:300]}"
+
 
 if "cg_session_logged" not in st.session_state:
     log_app_event("app_open")
     st.session_state["cg_session_logged"] = True
+
 
 def add_word_toc(document):
     """Replace a clearly labelled initial manual TOC with a real Word TOC field."""
