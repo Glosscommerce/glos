@@ -67,48 +67,62 @@ with st.expander("🔐 Dashboard administrateur", expanded=False):
             st.session_state["cg_admin_authenticated"] = hmac.compare_digest(
                 entered_password, admin_password
             )
+            st.session_state["cg_admin_login_attempted"] = True
+
         if st.session_state.get("cg_admin_authenticated", False):
             st.subheader("Statistiques CORRECTGLOSS")
             supabase_url = _cg_secret("SUPABASE_URL").rstrip("/")
             supabase_key = _cg_secret("SUPABASE_ANON_KEY")
-            try:
-                stats_response = requests.get(
-                    f"{supabase_url}/rest/v1/app_events",
-                    headers={
-                        "apikey": supabase_key,
-                        "Authorization": f"Bearer {supabase_key}",
-                        "Accept": "application/json",
-                        "Prefer": "count=exact",
-                        "Range": "0-999",
-                    },
-                    params={"select": "event_name,app_version,created_at", "order": "created_at.desc"},
-                    timeout=15,
-                )
-                stats_response.raise_for_status()
-                events = stats_response.json()
-                total_events = len(events)
-                event_counts = {}
-                for event in events:
-                    name = event.get("event_name") or "inconnu"
-                    event_counts[name] = event_counts.get(name, 0) + 1
-                metric_cols = st.columns(3)
-                metric_cols[0].metric("Événements récupérés", total_events)
-                metric_cols[1].metric("Ouvertures app_open", event_counts.get("app_open", 0))
-                metric_cols[2].metric("Analyses document", event_counts.get("document_analyzed", 0))
-                if event_counts:
-                    st.dataframe(
-                        [{"Événement": name, "Nombre": count} for name, count in sorted(event_counts.items())],
-                        use_container_width=True, hide_index=True,
+            if not supabase_url or not supabase_key:
+                st.error("Secrets Supabase manquants : vérifiez SUPABASE_URL et SUPABASE_ANON_KEY.")
+            else:
+                try:
+                    stats_response = requests.post(
+                        f"{supabase_url}/rest/v1/rpc/correctgloss_admin_stats",
+                        headers={
+                            "apikey": supabase_key,
+                            "Authorization": f"Bearer {supabase_key}",
+                            "Content-Type": "application/json",
+                            "Accept": "application/json",
+                        },
+                        json={"p_password": entered_password},
+                        timeout=15,
                     )
-                else:
-                    st.info("Aucun événement disponible pour le moment.")
-                st.caption("Affichage limité aux 1 000 derniers événements récupérés. app_open compte les sessions, pas les personnes uniques.")
-            except requests.RequestException as exc:
-                detail = getattr(getattr(exc, "response", None), "text", "") or str(exc)
-                st.error("Lecture des statistiques refusée par Supabase ou indisponible : " + detail[:250])
-                st.info("Aza manokatra SELECT public amin'ny app_events. Mila endpoint/RPC administrateur voaaro isika raha voasakan'ny RLS.")
-        elif entered_password:
+                    stats_response.raise_for_status()
+                    stats = stats_response.json()
+                    if not isinstance(stats, dict):
+                        raise ValueError("Réponse RPC inattendue.")
+                    total_events = int(stats.get("total_events", 0))
+                    app_open_count = int(stats.get("app_open", 0))
+                    document_count = int(stats.get("document_analyzed", 0))
+                    event_rows = stats.get("by_event") or []
+                    metric_cols = st.columns(3)
+                    metric_cols[0].metric("Événements enregistrés", total_events)
+                    metric_cols[1].metric("Ouvertures app_open", app_open_count)
+                    metric_cols[2].metric("Analyses document", document_count)
+                    if event_rows:
+                        st.dataframe(
+                            [
+                                {
+                                    "Événement": row.get("event_name", "inconnu"),
+                                    "Nombre": int(row.get("count", 0)),
+                                }
+                                for row in event_rows
+                            ],
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                    else:
+                        st.info("Aucun événement disponible pour le moment.")
+                    st.caption("app_open compte les sessions, pas les personnes uniques. Seules les statistiques agrégées sont renvoyées.")
+                except requests.RequestException as exc:
+                    detail = getattr(getattr(exc, "response", None), "text", "") or str(exc)
+                    st.error("Lecture des statistiques via RPC impossible : " + detail[:300])
+                except (ValueError, TypeError) as exc:
+                    st.error("Réponse statistique invalide : " + str(exc))
+        elif st.session_state.get("cg_admin_login_attempted", False):
             st.error("Mot de passe administrateur incorrect.")
+
 
 
 def add_word_toc(document):
