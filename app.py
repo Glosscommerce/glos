@@ -52,6 +52,8 @@ if "cg_session_logged" not in st.session_state:
     log_app_event("app_open")
     st.session_state["cg_session_logged"] = True
 
+st.caption("Diagnostic Supabase : " + st.session_state.get("cg_supabase_log_status", "Aucun événement envoyé"))
+
 
 def add_word_toc(document):
     """Replace a clearly labelled initial manual TOC with a real Word TOC field."""
