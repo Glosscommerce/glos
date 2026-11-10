@@ -55,6 +55,56 @@ if "cg_session_logged" not in st.session_state:
 
 
 st.caption("Diagnostic Supabase : " + st.session_state.get("cg_supabase_log_status", "Aucun événement envoyé"))
+# Formulaire public de contact, message et commentaire.
+with st.expander("💬 Contacter CORRECTGLOSS / Envoyer un commentaire", expanded=False):
+    with st.form("cg_public_message_form", clear_on_submit=True):
+        sender_name = st.text_input("Votre nom ou pseudonyme", max_chars=100)
+        sender_email = st.text_input("E-mail (facultatif)", max_chars=254)
+        message_type = st.selectbox(
+            "Type de message",
+            ["message", "commentaire", "reclamation", "suggestion"],
+            format_func=lambda x: {
+                "message": "Message",
+                "commentaire": "Commentaire",
+                "reclamation": "Réclamation",
+                "suggestion": "Suggestion",
+            }[x],
+        )
+        message_body = st.text_area("Votre message", max_chars=3000)
+        send_message = st.form_submit_button("Envoyer")
+    if send_message:
+        if len(message_body.strip()) < 5:
+            st.error("Le message doit contenir au moins 5 caractères.")
+        else:
+            supabase_url = _cg_secret("SUPABASE_URL").rstrip("/")
+            anon_key = _cg_secret("SUPABASE_ANON_KEY")
+            if not supabase_url or not anon_key:
+                st.error("Le service de messages n'est pas configuré. Réessayez plus tard.")
+            else:
+                try:
+                    response = requests.post(
+                        f"{supabase_url}/rest/v1/app_messages",
+                        headers={
+                            "apikey": anon_key,
+                            "Authorization": f"Bearer {anon_key}",
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal",
+                        },
+                        json={
+                            "sender_name": sender_name.strip() or "Utilisateur",
+                            "sender_email": sender_email.strip() or None,
+                            "message_type": message_type,
+                            "message": message_body.strip(),
+                        },
+                        timeout=15,
+                    )
+                    response.raise_for_status()
+                    log_app_event("message_submitted")
+                    st.success("Votre message a été envoyé. Merci pour votre retour !")
+                except requests.RequestException as exc:
+                    detail = getattr(getattr(exc, "response", None), "text", "") or str(exc)
+                    st.error("Envoi impossible pour le moment : " + detail[:200])
+
 
 # Espace administrateur protégé par un mot de passe stocké dans Streamlit Secrets.
 with st.expander("🔐 Dashboard administrateur", expanded=False):
@@ -71,56 +121,126 @@ with st.expander("🔐 Dashboard administrateur", expanded=False):
             st.session_state["cg_admin_login_attempted"] = True
 
         if st.session_state.get("cg_admin_authenticated", False):
-            st.subheader("Statistiques CORRECTGLOSS")
+            st.subheader("Dashboard CORRECTGLOSS — V2.1")
             supabase_url = _cg_secret("SUPABASE_URL").rstrip("/")
-            supabase_key = _cg_secret("SUPABASE_ANON_KEY")
-            if not supabase_url or not supabase_key:
+            anon_key = _cg_secret("SUPABASE_ANON_KEY")
+            service_key = _cg_secret("SUPABASE_SERVICE_ROLE_KEY")
+            if not supabase_url or not anon_key:
                 st.error("Secrets Supabase manquants : vérifiez SUPABASE_URL et SUPABASE_ANON_KEY.")
+            elif not service_key:
+                st.warning(
+                    "Ajoutez SUPABASE_SERVICE_ROLE_KEY dans les Secrets Streamlit "
+                    "pour consulter les statistiques détaillées et les messages. "
+                    "Ne partagez jamais cette clé."
+                )
             else:
+                headers = {
+                    "apikey": service_key,
+                    "Authorization": f"Bearer {service_key}",
+                    "Accept": "application/json",
+                }
                 try:
-                    stats_response = requests.post(
-                        f"{supabase_url}/rest/v1/rpc/correctgloss_admin_stats",
-                        headers={
-                            "apikey": supabase_key,
-                            "Authorization": f"Bearer {supabase_key}",
-                            "Content-Type": "application/json",
-                            "Accept": "application/json",
-                        },
-                        json={"p_password": entered_password},
-                        timeout=15,
+                    events_response = requests.get(
+                        f"{supabase_url}/rest/v1/app_events",
+                        headers={**headers, "Range": "0-4999"},
+                        params={"select": "event_name,created_at", "order": "created_at.desc"},
+                        timeout=20,
                     )
-                    stats_response.raise_for_status()
-                    stats = stats_response.json()
-                    if not isinstance(stats, dict):
-                        raise ValueError("Réponse RPC inattendue.")
-                    total_events = int(stats.get("total_events", 0))
-                    app_open_count = int(stats.get("app_open", 0))
-                    document_count = int(stats.get("document_analyzed", 0))
-                    event_rows = stats.get("by_event") or []
-                    metric_cols = st.columns(3)
-                    metric_cols[0].metric("Événements enregistrés", total_events)
-                    metric_cols[1].metric("Ouvertures app_open", app_open_count)
-                    metric_cols[2].metric("Analyses document", document_count)
-                    if event_rows:
+                    events_response.raise_for_status()
+                    events = events_response.json()
+
+                    messages_response = requests.get(
+                        f"{supabase_url}/rest/v1/app_messages",
+                        headers={**headers, "Range": "0-499"},
+                        params={"select": "id,created_at,sender_name,sender_email,message_type,message,status",
+                                "order": "created_at.desc"},
+                        timeout=20,
+                    )
+                    messages_response.raise_for_status()
+                    messages = messages_response.json()
+
+                    from collections import Counter
+                    from datetime import date
+                    event_counts = Counter(row.get("event_name", "inconnu") for row in events)
+                    today = date.today()
+                    today_events = [
+                        row for row in events
+                        if row.get("created_at", "")[:10] == today.isoformat()
+                    ]
+                    visit_count = event_counts.get("app_open", 0)
+                    correction_count = (
+                        event_counts.get("document_analyzed", 0)
+                        + event_counts.get("manual_correction_applied", 0)
+                    )
+                    cols = st.columns(4)
+                    cols[0].metric("Événements enregistrés", len(events))
+                    cols[1].metric("Sessions / visites", visit_count)
+                    cols[2].metric("Documents analysés", event_counts.get("document_analyzed", 0))
+                    cols[3].metric("Messages reçus", len(messages))
+                    st.caption(
+                        f"Événements aujourd'hui : {len(today_events)} · "
+                        f"Corrections/analyses comptabilisées : {correction_count}. "
+                        "Les visites correspondent aux sessions, pas aux personnes uniques."
+                    )
+
+                    st.markdown("#### Activité journalière")
+                    daily = Counter()
+                    monthly = Counter()
+                    for row in events:
+                        stamp = row.get("created_at", "")
+                        if len(stamp) >= 10:
+                            daily[stamp[:10]] += 1
+                            monthly[stamp[:7]] += 1
+                    if daily:
+                        import pandas as pd
+                        daily_frame = pd.DataFrame(
+                            [{"Date": key, "Événements": value}
+                             for key, value in sorted(daily.items())]
+                        ).set_index("Date")
+                        st.bar_chart(daily_frame)
+                    else:
+                        st.info("Aucune donnée journalière disponible.")
+
+                    st.markdown("#### Activité mensuelle")
+                    if monthly:
+                        monthly_frame = pd.DataFrame(
+                            [{"Mois": key, "Événements": value}
+                             for key, value in sorted(monthly.items())]
+                        ).set_index("Mois")
+                        st.bar_chart(monthly_frame)
+                    else:
+                        st.info("Aucune donnée mensuelle disponible.")
+
+                    st.markdown("#### Répartition des événements")
+                    if event_counts:
                         st.dataframe(
-                            [
-                                {
-                                    "Événement": row.get("event_name", "inconnu"),
-                                    "Nombre": int(row.get("count", 0)),
-                                }
-                                for row in event_rows
-                            ],
+                            [{"Événement": name, "Nombre": count}
+                             for name, count in event_counts.most_common()],
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+
+                    st.markdown("#### Messages et commentaires reçus")
+                    if messages:
+                        st.dataframe(
+                            [{
+                                "Date": row.get("created_at", ""),
+                                "Nom": row.get("sender_name", ""),
+                                "E-mail": row.get("sender_email") or "",
+                                "Type": row.get("message_type", ""),
+                                "Message": row.get("message", ""),
+                                "Statut": row.get("status", ""),
+                            } for row in messages],
                             use_container_width=True,
                             hide_index=True,
                         )
                     else:
-                        st.info("Aucun événement disponible pour le moment.")
-                    st.caption("app_open compte les sessions, pas les personnes uniques. Seules les statistiques agrégées sont renvoyées.")
+                        st.info("Aucun message reçu pour le moment.")
                 except requests.RequestException as exc:
                     detail = getattr(getattr(exc, "response", None), "text", "") or str(exc)
-                    st.error("Lecture des statistiques via RPC impossible : " + detail[:300])
-                except (ValueError, TypeError) as exc:
-                    st.error("Réponse statistique invalide : " + str(exc))
+                    st.error("Lecture Supabase impossible : " + detail[:300])
+                except (ValueError, TypeError, KeyError) as exc:
+                    st.error("Données Supabase invalides : " + str(exc))
         elif st.session_state.get("cg_admin_login_attempted", False):
             st.error("Mot de passe administrateur incorrect.")
 
