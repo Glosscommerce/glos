@@ -8,9 +8,10 @@ import requests
 from correction_engine import correct_docx_with_languagetool, analyze_document_structure
 from export_engine import add_page_numbers, apply_academic_heading_styles, build_pdf_from_docx
 
-APP_NAME = "Mémoire Correcteur Pro"
-st.set_page_config(page_title=APP_NAME, page_icon="📘", layout="wide")
-st.title("📘 CORRECTGLOSS")
+APP_NAME = "CORRECTGLOSS"
+st.set_page_config(page_title=APP_NAME, page_icon="correctgloss_icon.png", layout="wide")
+st.image("correctgloss_brand.png", width=280)
+st.title("CORRECTGLOSS")
 st.caption("Correction • reformulation académique • mise en page • contrôle des citations")
 
 def _cg_secret(name):
