@@ -253,7 +253,7 @@ def _apply_local_corrections(paragraph, language_code: str):
             local_end = min(end, first_end) - first_start
             first_value = first_run.text or ""
             first_run.text = (
-                first_value[:local_start] + replacement + first_value[local_end:]
+                first_value[:local_start] + candidate_replacement + first_value[local_end:]
             )
 
             for run_start, run_end, run in affected[1:]:
@@ -264,7 +264,7 @@ def _apply_local_corrections(paragraph, language_code: str):
 
             applied.append({
                 "Texte initial": old_text,
-                "Texte corrigé": replacement,
+                "Texte corrigé": candidate_replacement,
                 "Explication": explanation,
                 "Méthode": "Règle locale prudente; mise en forme Word conservée autant que possible.",
             })
