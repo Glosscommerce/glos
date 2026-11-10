@@ -125,6 +125,62 @@ with st.expander("🔐 Dashboard administrateur", expanded=False):
 
 
 
+def apply_selected_format(document, font, font_size, line_spacing, margin_cm, justify):
+    """Apply the selected academic font consistently to Word styles and all text runs."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    font_size = int(font_size)
+    for section in document.sections:
+        section.top_margin = section.bottom_margin = Inches(float(margin_cm) / 2.54)
+        section.left_margin = section.right_margin = Inches(float(margin_cm) / 2.54)
+
+    # Set the font in paragraph styles as well as direct formatting. Word may
+    # otherwise fall back to a theme font when a paragraph has no explicit run font.
+    for style in document.styles:
+        try:
+            style.font.name = font
+            style.font.size = Pt(font_size)
+            rpr = style.element.get_or_add_rPr()
+            rfonts = rpr.rFonts
+            if rfonts is None:
+                rfonts = OxmlElement("w:rFonts")
+                rpr.insert(0, rfonts)
+            for attribute in ("ascii", "hAnsi", "eastAsia", "cs"):
+                rfonts.set(qn(f"w:{attribute}"), font)
+        except Exception:
+            continue
+
+    def format_paragraph(paragraph):
+        is_heading = bool(paragraph.style and paragraph.style.name.lower().startswith("heading"))
+        if justify and not is_heading:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        paragraph.paragraph_format.line_spacing = float(line_spacing)
+        paragraph.paragraph_format.space_after = Pt(6)
+        for run in paragraph.runs:
+            run.font.name = font
+            run.font.size = Pt(font_size)
+            rpr = run._element.get_or_add_rPr()
+            rfonts = rpr.rFonts
+            if rfonts is None:
+                rfonts = OxmlElement("w:rFonts")
+                rpr.insert(0, rfonts)
+            for attribute in ("ascii", "hAnsi", "eastAsia", "cs"):
+                rfonts.set(qn(f"w:{attribute}"), font)
+
+    for paragraph in document.paragraphs:
+        format_paragraph(paragraph)
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    format_paragraph(paragraph)
+    for section in document.sections:
+        for paragraph in section.header.paragraphs + section.footer.paragraphs:
+            format_paragraph(paragraph)
+    return document
+
+
 def add_word_toc(document):
     """Replace a clearly labelled initial manual TOC with a real Word TOC field."""
     from docx.oxml import OxmlElement
@@ -294,14 +350,17 @@ if writing_submit:
                     prepared_doc.add_paragraph(paragraph_text)
                     body_text_parts.append(paragraph_text)
             prepared_text_parts.extend([str(heading), "\n".join(body_text_parts)])
+        apply_selected_format(
+            prepared_doc, font, font_size, line_spacing, margin_cm, justify
+        )
         prepared_buffer = io.BytesIO()
         prepared_doc.save(prepared_buffer)
         prepared_docx_bytes = prepared_buffer.getvalue()
         st.session_state["cg_prepared_writing_docx"] = prepared_docx_bytes
         try:
             st.session_state["cg_prepared_writing_pdf"] = build_pdf_from_docx(
-                prepared_docx_bytes, font="Times New Roman", font_size=12,
-                line_spacing="1.5", margin_cm=2.5,
+                prepared_docx_bytes, font=font, font_size=font_size,
+                line_spacing=line_spacing, margin_cm=margin_cm,
             )
         except Exception:
             st.session_state.pop("cg_prepared_writing_pdf", None)
@@ -537,31 +596,10 @@ st.caption("Les exports utilisent le document corrigé automatiquement lorsqu'il
 if st.button("Préparer les fichiers Word et PDF", type="primary"):
     source_bytes = st.session_state.get("cg_corrected_docx", original_bytes)
     formatted = Document(io.BytesIO(source_bytes))
-    for section in formatted.sections:
-        section.top_margin = section.bottom_margin = Inches(margin_cm / 2.54)
-        section.left_margin = section.right_margin = Inches(margin_cm / 2.54)
-    # Apply heading styles first: assigning a Word Heading style afterwards can
-    # replace paragraph formatting, including the selected line spacing.
+    # Apply heading styles first, then enforce the selected font on styles,
+    # body paragraphs, tables, headers and footers.
     apply_academic_heading_styles(formatted)
-
-    def format_export_paragraph(para):
-        if justify and not (para.style and para.style.name.lower().startswith("heading")):
-            para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        # Set an explicit multiple line spacing on every paragraph after styles.
-        para.paragraph_format.line_spacing = float(line_spacing)
-        para.paragraph_format.space_after = Pt(6)
-        for run in para.runs:
-            run.font.name = font
-            run.font.size = Pt(int(font_size))
-
-    for para in formatted.paragraphs:
-        format_export_paragraph(para)
-    # Word tables contain their own paragraphs and need the same formatting.
-    for table in formatted.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    format_export_paragraph(para)
+    apply_selected_format(formatted, font, font_size, line_spacing, margin_cm, justify)
     add_page_numbers(formatted)
     formatted = add_word_toc(formatted)
     word_output = io.BytesIO()
