@@ -7,6 +7,9 @@
   <meta name="description" content="CORRECTGLOSS est un outil en ligne pour corriger et préparer des documents, organiser un mémoire et exporter des fichiers Word ou PDF.">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#123b5d">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+  <link rel="apple-touch-icon" href="./icon-192.png">
   <meta property="og:type" content="website">
   <meta property="og:title" content="CORRECTGLOSS — Correction et préparation de documents">
   <meta property="og:description" content="Un outil en ligne pour accompagner la rédaction, la correction et la mise en forme de documents.">
@@ -66,5 +69,10 @@
     </section>
   </main>
   <footer>© 2026 CORRECTGLOSS. Tous droits réservés.</footer>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+    }
+  </script>
 </body>
 </html>
