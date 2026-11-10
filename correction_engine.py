@@ -213,11 +213,24 @@ LOCAL_CORRECTION_RULES = (
 
 )
 
+# Les 9 premières règles sont des corrections françaises ciblées.
+# Les règles suivantes sont réservées aux documents en anglais.
+FRENCH_LOCAL_CORRECTION_RULES = LOCAL_CORRECTION_RULES[:9]
+ENGLISH_LOCAL_CORRECTION_RULES = LOCAL_CORRECTION_RULES[9:]
 
-def _apply_local_corrections(paragraph):
+def _local_rules_for_language(language_code: str):
+    code = (language_code or "").strip().lower()
+    if code.startswith("fr"):
+        return FRENCH_LOCAL_CORRECTION_RULES
+    if code.startswith("en"):
+        return ENGLISH_LOCAL_CORRECTION_RULES
+    return ()
+
+
+def _apply_local_corrections(paragraph, language_code: str):
     """Apply only high-confidence local fixes while preserving Word run formatting."""
     applied = []
-    for pattern, replacement, explanation in LOCAL_CORRECTION_RULES:
+    for pattern, replacement, explanation in _local_rules_for_language(language_code):
         matches = list(re.finditer(pattern, paragraph.text or ""))
         for match in reversed(matches):
             start, end = match.span()
@@ -232,8 +245,9 @@ def _apply_local_corrections(paragraph):
 
             old_text = (paragraph.text or "")[start:end]
             # Keep sentence-initial capitalization when a local rule matches case-insensitively.
-            if old_text[:1].isupper() and replacement[:1].islower():
-                replacement = replacement[:1].upper() + replacement[1:]
+            candidate_replacement = replacement
+            if old_text[:1].isupper() and candidate_replacement[:1].islower():
+                candidate_replacement = candidate_replacement[:1].upper() + candidate_replacement[1:]
             first_start, first_end, first_run = affected[0]
             local_start = start - first_start
             local_end = min(end, first_end) - first_start
@@ -453,7 +467,7 @@ def correct_docx_with_languagetool(document, language_code: str):
     # Corriger d'abord les erreurs récurrentes très clairement identifiables,
     # y compris celles que le service LanguageTool ne signale pas.
     for paragraph in paragraphs:
-        local_changes = _apply_local_corrections(paragraph)
+        local_changes = _apply_local_corrections(paragraph, language_code)
         changes.extend(local_changes)
     detected_count = len(changes)
     # Count a LanguageTool finding only once across correction passes.
@@ -645,7 +659,7 @@ def correct_docx_with_languagetool(document, language_code: str):
     # or leave a known agreement error after earlier edits. Re-apply only the
     # conservative local rules so the final DOCX cannot undo these high-confidence fixes.
     for paragraph in paragraphs:
-        final_local_changes = _apply_local_corrections(paragraph)
+        final_local_changes = _apply_local_corrections(paragraph, language_code)
         changes.extend(final_local_changes)
 
     return document, changes, skipped, detected_count, suggestions
