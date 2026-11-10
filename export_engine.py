@@ -75,11 +75,20 @@ def _heading_level(paragraph):
 
 
 def apply_academic_heading_styles(document):
-    """Apply Word Heading 1-3 styles to recognisable academic section titles."""
+    """Apply Word Heading 1-3 styles, creating missing styles in imported templates."""
+    from docx.enum.style import WD_STYLE_TYPE
+
+    for level in range(1, 4):
+        style_name = f"Heading {level}"
+        try:
+            document.styles[style_name]
+        except KeyError:
+            document.styles.add_style(style_name, WD_STYLE_TYPE.PARAGRAPH)
+
     for paragraph in document.paragraphs:
         level = _heading_level(paragraph)
         if level is not None:
-            paragraph.style = f"Heading {level + 1}"
+            paragraph.style = document.styles[f"Heading {level + 1}"]
     return document
 
 def _is_toc_field(paragraph):
