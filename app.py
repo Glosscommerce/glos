@@ -106,143 +106,160 @@ with st.expander("💬 Contacter CORRECTGLOSS / Envoyer un commentaire", expande
                     st.error("Envoi impossible pour le moment : " + detail[:200])
 
 
-# Espace administrateur protégé par un mot de passe stocké dans Streamlit Secrets.
-with st.expander("🔐 Dashboard administrateur", expanded=False):
+# Espace administrateur accessible uniquement via l'URL privée ?admin=1.
+# Le mot de passe reste obligatoire : connaître l'URL ne suffit pas pour accéder aux données.
+try:
+    cg_admin_route = st.query_params.get("admin", "") == "1"
+except Exception:
+    cg_admin_route = st.experimental_get_query_params().get("admin", [""])[0] == "1"
+
+if cg_admin_route:
+    st.title("🔐 Espace administrateur CORRECTGLOSS")
     admin_password = _cg_secret("ADMIN_PASSWORD")
     if not admin_password:
         st.warning("Configurez ADMIN_PASSWORD dans les Secrets Streamlit.")
-    else:
-        entered_password = st.text_input("Mot de passe administrateur", type="password", key="cg_admin_password")
-        if st.button("Accéder au dashboard", key="cg_admin_login"):
+    elif not st.session_state.get("cg_admin_authenticated", False):
+        with st.form("cg_admin_login_form"):
+            entered_password = st.text_input(
+                "Mot de passe administrateur", type="password", key="cg_admin_password"
+            )
+            login_submitted = st.form_submit_button("Accéder au dashboard")
+        if login_submitted:
             import hmac
             st.session_state["cg_admin_authenticated"] = hmac.compare_digest(
                 entered_password, admin_password
             )
-            st.session_state["cg_admin_login_attempted"] = True
-
-        if st.session_state.get("cg_admin_authenticated", False):
-            st.subheader("Dashboard CORRECTGLOSS — V2.1")
-            supabase_url = _cg_secret("SUPABASE_URL").rstrip("/")
-            anon_key = _cg_secret("SUPABASE_ANON_KEY")
-            service_key = _cg_secret("SUPABASE_SERVICE_ROLE_KEY")
-            if not supabase_url or not anon_key:
-                st.error("Secrets Supabase manquants : vérifiez SUPABASE_URL et SUPABASE_ANON_KEY.")
-            elif not service_key:
-                st.warning(
-                    "Ajoutez SUPABASE_SERVICE_ROLE_KEY dans les Secrets Streamlit "
-                    "pour consulter les statistiques détaillées et les messages. "
-                    "Ne partagez jamais cette clé."
-                )
+            if not st.session_state["cg_admin_authenticated"]:
+                st.error("Mot de passe administrateur incorrect.")
             else:
-                headers = {
-                    "apikey": service_key,
-                    "Authorization": f"Bearer {service_key}",
-                    "Accept": "application/json",
-                }
-                try:
-                    events_response = requests.get(
-                        f"{supabase_url}/rest/v1/app_events",
-                        headers={**headers, "Range": "0-4999"},
-                        params={"select": "event_name,created_at", "order": "created_at.desc"},
-                        timeout=20,
+                st.rerun()
+
+    if st.session_state.get("cg_admin_authenticated", False):
+        st.subheader("Dashboard CORRECTGLOSS — V2.1")
+        if st.button("Se déconnecter", key="cg_admin_logout"):
+            st.session_state["cg_admin_authenticated"] = False
+            st.session_state.pop("cg_admin_password", None)
+            st.rerun()
+
+        supabase_url = _cg_secret("SUPABASE_URL").rstrip("/")
+        anon_key = _cg_secret("SUPABASE_ANON_KEY")
+        service_key = _cg_secret("SUPABASE_SERVICE_ROLE_KEY")
+        if not supabase_url or not anon_key:
+            st.error("Secrets Supabase manquants : vérifiez SUPABASE_URL et SUPABASE_ANON_KEY.")
+        elif not service_key:
+            st.warning(
+                "Ajoutez SUPABASE_SERVICE_ROLE_KEY dans les Secrets Streamlit "
+                "pour consulter les statistiques détaillées et les messages. "
+                "Ne partagez jamais cette clé."
+            )
+        else:
+            headers = {
+                "apikey": service_key,
+                "Authorization": f"Bearer {service_key}",
+                "Accept": "application/json",
+            }
+            try:
+                events_response = requests.get(
+                    f"{supabase_url}/rest/v1/app_events",
+                    headers={**headers, "Range": "0-4999"},
+                    params={"select": "event_name,created_at", "order": "created_at.desc"},
+                    timeout=20,
+                )
+                events_response.raise_for_status()
+                events = events_response.json()
+
+                messages_response = requests.get(
+                    f"{supabase_url}/rest/v1/app_messages",
+                    headers={**headers, "Range": "0-499"},
+                    params={"select": "id,created_at,sender_name,sender_email,message_type,message,status",
+                            "order": "created_at.desc"},
+                    timeout=20,
+                )
+                messages_response.raise_for_status()
+                messages = messages_response.json()
+
+                from collections import Counter
+                from datetime import date
+                event_counts = Counter(row.get("event_name", "inconnu") for row in events)
+                today = date.today()
+                today_events = [
+                    row for row in events
+                    if row.get("created_at", "")[:10] == today.isoformat()
+                ]
+                visit_count = event_counts.get("app_open", 0)
+                correction_count = (
+                    event_counts.get("document_analyzed", 0)
+                    + event_counts.get("manual_correction_applied", 0)
+                )
+                cols = st.columns(4)
+                cols[0].metric("Événements enregistrés", len(events))
+                cols[1].metric("Sessions / visites", visit_count)
+                cols[2].metric("Documents analysés", event_counts.get("document_analyzed", 0))
+                cols[3].metric("Messages reçus", len(messages))
+                st.caption(
+                    f"Événements aujourd'hui : {len(today_events)} · "
+                    f"Corrections/analyses comptabilisées : {correction_count}. "
+                    "Les visites correspondent aux sessions, pas aux personnes uniques."
+                )
+
+                st.markdown("#### Activité journalière")
+                daily = Counter()
+                monthly = Counter()
+                for row in events:
+                    stamp = row.get("created_at", "")
+                    if len(stamp) >= 10:
+                        daily[stamp[:10]] += 1
+                        monthly[stamp[:7]] += 1
+                if daily:
+                    import pandas as pd
+                    daily_frame = pd.DataFrame(
+                        [{"Date": key, "Événements": value}
+                         for key, value in sorted(daily.items())]
+                    ).set_index("Date")
+                    st.bar_chart(daily_frame)
+                else:
+                    st.info("Aucune donnée journalière disponible.")
+
+                st.markdown("#### Activité mensuelle")
+                if monthly:
+                    monthly_frame = pd.DataFrame(
+                        [{"Mois": key, "Événements": value}
+                         for key, value in sorted(monthly.items())]
+                    ).set_index("Mois")
+                    st.bar_chart(monthly_frame)
+                else:
+                    st.info("Aucune donnée mensuelle disponible.")
+
+                st.markdown("#### Répartition des événements")
+                if event_counts:
+                    st.dataframe(
+                        [{"Événement": name, "Nombre": count}
+                         for name, count in event_counts.most_common()],
+                        use_container_width=True,
+                        hide_index=True,
                     )
-                    events_response.raise_for_status()
-                    events = events_response.json()
 
-                    messages_response = requests.get(
-                        f"{supabase_url}/rest/v1/app_messages",
-                        headers={**headers, "Range": "0-499"},
-                        params={"select": "id,created_at,sender_name,sender_email,message_type,message,status",
-                                "order": "created_at.desc"},
-                        timeout=20,
+                st.markdown("#### Messages et commentaires reçus")
+                if messages:
+                    st.dataframe(
+                        [{
+                            "Date": row.get("created_at", ""),
+                            "Nom": row.get("sender_name", ""),
+                            "E-mail": row.get("sender_email") or "",
+                            "Type": row.get("message_type", ""),
+                            "Message": row.get("message", ""),
+                            "Statut": row.get("status", ""),
+                        } for row in messages],
+                        use_container_width=True,
+                        hide_index=True,
                     )
-                    messages_response.raise_for_status()
-                    messages = messages_response.json()
-
-                    from collections import Counter
-                    from datetime import date
-                    event_counts = Counter(row.get("event_name", "inconnu") for row in events)
-                    today = date.today()
-                    today_events = [
-                        row for row in events
-                        if row.get("created_at", "")[:10] == today.isoformat()
-                    ]
-                    visit_count = event_counts.get("app_open", 0)
-                    correction_count = (
-                        event_counts.get("document_analyzed", 0)
-                        + event_counts.get("manual_correction_applied", 0)
-                    )
-                    cols = st.columns(4)
-                    cols[0].metric("Événements enregistrés", len(events))
-                    cols[1].metric("Sessions / visites", visit_count)
-                    cols[2].metric("Documents analysés", event_counts.get("document_analyzed", 0))
-                    cols[3].metric("Messages reçus", len(messages))
-                    st.caption(
-                        f"Événements aujourd'hui : {len(today_events)} · "
-                        f"Corrections/analyses comptabilisées : {correction_count}. "
-                        "Les visites correspondent aux sessions, pas aux personnes uniques."
-                    )
-
-                    st.markdown("#### Activité journalière")
-                    daily = Counter()
-                    monthly = Counter()
-                    for row in events:
-                        stamp = row.get("created_at", "")
-                        if len(stamp) >= 10:
-                            daily[stamp[:10]] += 1
-                            monthly[stamp[:7]] += 1
-                    if daily:
-                        import pandas as pd
-                        daily_frame = pd.DataFrame(
-                            [{"Date": key, "Événements": value}
-                             for key, value in sorted(daily.items())]
-                        ).set_index("Date")
-                        st.bar_chart(daily_frame)
-                    else:
-                        st.info("Aucune donnée journalière disponible.")
-
-                    st.markdown("#### Activité mensuelle")
-                    if monthly:
-                        monthly_frame = pd.DataFrame(
-                            [{"Mois": key, "Événements": value}
-                             for key, value in sorted(monthly.items())]
-                        ).set_index("Mois")
-                        st.bar_chart(monthly_frame)
-                    else:
-                        st.info("Aucune donnée mensuelle disponible.")
-
-                    st.markdown("#### Répartition des événements")
-                    if event_counts:
-                        st.dataframe(
-                            [{"Événement": name, "Nombre": count}
-                             for name, count in event_counts.most_common()],
-                            use_container_width=True,
-                            hide_index=True,
-                        )
-
-                    st.markdown("#### Messages et commentaires reçus")
-                    if messages:
-                        st.dataframe(
-                            [{
-                                "Date": row.get("created_at", ""),
-                                "Nom": row.get("sender_name", ""),
-                                "E-mail": row.get("sender_email") or "",
-                                "Type": row.get("message_type", ""),
-                                "Message": row.get("message", ""),
-                                "Statut": row.get("status", ""),
-                            } for row in messages],
-                            use_container_width=True,
-                            hide_index=True,
-                        )
-                    else:
-                        st.info("Aucun message reçu pour le moment.")
-                except requests.RequestException as exc:
-                    detail = getattr(getattr(exc, "response", None), "text", "") or str(exc)
-                    st.error("Lecture Supabase impossible : " + detail[:300])
-                except (ValueError, TypeError, KeyError) as exc:
-                    st.error("Données Supabase invalides : " + str(exc))
-        elif st.session_state.get("cg_admin_login_attempted", False):
-            st.error("Mot de passe administrateur incorrect.")
+                else:
+                    st.info("Aucun message reçu pour le moment.")
+            except requests.RequestException as exc:
+                detail = getattr(getattr(exc, "response", None), "text", "") or str(exc)
+                st.error("Lecture Supabase impossible : " + detail[:300])
+            except (ValueError, TypeError, KeyError) as exc:
+                st.error("Données Supabase invalides : " + str(exc))
 
 
 
