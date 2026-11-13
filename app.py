@@ -128,6 +128,7 @@ with st.form("cg_prepare_writing_form"):
         "Niveau", ["Collège", "Lycée", "Licence", "Master", "Professionnel"]
     )
     writing_language = st.selectbox("Langue de rédaction", ["Français", "Anglais"])
+    writing_pages = st.number_input("Nombre de pages souhaité", min_value=1, max_value=20, value=5, step=1)
     writing_instructions = st.text_area(
         "Consignes particulières (facultatif)",
         placeholder="Ex. : parler du contexte malgache, citer des exemples, préciser la période étudiée..."
@@ -172,33 +173,117 @@ def cg_build_writing_outline(subject, kind, level, lang, instructions, full_draf
         sections.append(("QUESTIONS POUR VOUS GUIDER", ["Quelle question précise le document traite-t-il ?", "Quelles informations sont vérifiées et quelles données restent à collecter ?", "Les conclusions répondent-elles aux objectifs annoncés ?"] if fr else ["What specific question does the document address?", "Which information is verified and what data remains to be collected?", "Do the conclusions answer the stated objectives?"]))
     return [("TITLE", subject), ("Type", kind), ("Level", level), ("Language", lang)] + sections
 
+def cg_get_gemini_key():
+    key = os.getenv("GEMINI_API_KEY", "")
+    if not key:
+        try:
+            key = st.secrets.get("GEMINI_API_KEY", "")
+        except Exception:
+            key = ""
+    return str(key).strip()
+
+
+def cg_generate_full_draft(subject, kind, level, lang, instructions, pages):
+    """Generate a complete editable draft with Gemini without inventing evidence."""
+    api_key = cg_get_gemini_key()
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY n'est pas configurée dans Streamlit Cloud > Settings > Secrets.")
+    target_words = int(pages) * 280
+    language_rule = "Rédige entièrement en français." if lang == "Français" else "Write entirely in English."
+    prompt = f"""
+Tu es un assistant de rédaction académique. Produis un véritable document complet et développé,
+pas un plan, pas une liste de conseils et pas des paragraphes à compléter.
+Sujet : {subject}
+Type : {kind}
+Niveau : {level}
+Langue : {lang}
+Longueur cible : environ {target_words} mots (environ {pages} pages).
+Consignes : {instructions or "Aucune consigne supplémentaire."}
+{language_rule}
+Utilise des titres clairs, une introduction développée, des parties argumentées avec transitions
+et une conclusion qui répond au sujet. Pour un mémoire/projet de recherche, développe le contexte,
+la problématique, les questions, les objectifs, les hypothèses, le cadre théorique et conceptuel,
+la méthodologie et les axes d'analyse.
+N'invente jamais de résultats d'enquête, chiffres, citations, auteurs ou références bibliographiques.
+Signale les informations manquantes par [DONNÉE À VÉRIFIER] ou [SOURCE À AJOUTER].
+Ne prétends pas qu'une enquête a déjà été menée. Retourne uniquement le document rédigé.
+"""
+    response = requests.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+        json={"contents": [{"parts": [{"text": prompt}]}],
+              "generationConfig": {"temperature": 0.65, "maxOutputTokens": 8192}},
+        timeout=180,
+    )
+    response.raise_for_status()
+    data = response.json()
+    candidates = data.get("candidates", [])
+    parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+    result = "\n".join(part.get("text", "") for part in parts if part.get("text"))
+    if not result.strip():
+        raise RuntimeError("Gemini n'a retourné aucun texte.")
+    return result.strip()
+
+
 if writing_submit:
     if not writing_subject.strip():
         st.error("Veuillez saisir le sujet de votre rédaction.")
     else:
-        prepared_lines = cg_build_writing_outline(
-            writing_subject.strip(), writing_type, writing_level, writing_language,
-            writing_instructions, writing_mode.startswith("Rédaction complète")
-        )
+        is_full_draft = writing_mode.startswith("Rédaction complète")
+        generated_text = ""
+        if is_full_draft:
+            with st.spinner("Gemini prépare votre rédaction complète..."):
+                try:
+                    generated_text = cg_generate_full_draft(
+                        writing_subject.strip(), writing_type, writing_level,
+                        writing_language, writing_instructions, writing_pages
+                    )
+                except requests.HTTPError as e:
+                    st.error(f"Erreur Gemini API : {e}. Vérifiez la clé, le quota et le modèle utilisé.")
+                except Exception as e:
+                    st.error(f"Rédaction complète indisponible : {e}")
+
         prepared_doc = Document()
         prepared_doc.add_heading(writing_subject.strip(), 0)
         prepared_doc.add_paragraph(
             f"Type : {writing_type} | Niveau : {writing_level} | Langue : {writing_language}"
         )
-        prepared_text_parts = [writing_subject.strip()]
-        for heading, body in prepared_lines[4:]:
-            prepared_doc.add_heading(str(heading), level=1)
-            body_paragraphs = (
-                list(body) if isinstance(body, (list, tuple))
-                else str(body or "").splitlines()
+        if generated_text:
+            for block in re.split(r"\n\s*\n", generated_text):
+                block = block.strip()
+                if not block:
+                    continue
+                lines = block.splitlines()
+                if len(lines) == 1 and (lines[0].isupper() or re.match(r"^(PARTIE|CHAPITRE|INTRODUCTION|CONCLUSION)", lines[0], re.I)):
+                    prepared_doc.add_heading(lines[0].strip("# *"), level=1)
+                else:
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith("#"):
+                            prepared_doc.add_heading(line.strip("# ").strip(), level=1)
+                        elif line:
+                            prepared_doc.add_paragraph(line)
+            prepared_text = generated_text
+            st.session_state["cg_writing_source"] = "Gemini"
+        else:
+            prepared_lines = cg_build_writing_outline(
+                writing_subject.strip(), writing_type, writing_level, writing_language,
+                writing_instructions, is_full_draft
             )
-            body_text_parts = []
-            for paragraph_text in body_paragraphs:
-                paragraph_text = str(paragraph_text).strip()
-                if paragraph_text:
-                    prepared_doc.add_paragraph(paragraph_text)
-                    body_text_parts.append(paragraph_text)
-            prepared_text_parts.extend([str(heading), "\n".join(body_text_parts)])
+            prepared_text_parts = [writing_subject.strip()]
+            for heading, body in prepared_lines[4:]:
+                prepared_doc.add_heading(str(heading), level=1)
+                body_paragraphs = list(body) if isinstance(body, (list, tuple)) else str(body or "").splitlines()
+                body_text_parts = []
+                for paragraph_text in body_paragraphs:
+                    paragraph_text = str(paragraph_text).strip()
+                    if paragraph_text:
+                        prepared_doc.add_paragraph(paragraph_text)
+                        body_text_parts.append(paragraph_text)
+                prepared_text_parts.extend([str(heading), "\n".join(body_text_parts)])
+            prepared_text = "\n\n".join(prepared_text_parts)
+            st.session_state["cg_writing_source"] = "Structure gratuite"
+
         prepared_buffer = io.BytesIO()
         prepared_doc.save(prepared_buffer)
         prepared_docx_bytes = prepared_buffer.getvalue()
@@ -210,15 +295,17 @@ if writing_submit:
             )
         except Exception:
             st.session_state.pop("cg_prepared_writing_pdf", None)
-        st.session_state["cg_prepared_writing_text"] = "\n\n".join(prepared_text_parts)
+        st.session_state["cg_prepared_writing_text"] = prepared_text
         st.session_state["cg_prepared_writing_name"] = re.sub(
             r"[^A-Za-z0-9_-]+", "_", writing_subject.strip()
         )[:50] or "redaction"
-        st.success(
-            "Votre plan structuré est prêt." if writing_mode.startswith("Plan détaillé")
-            else "Votre brouillon structuré est prêt. Complétez les passages entre crochets avec vos propres informations et sources."
-        )
-        st.info("Version gratuite : CORRECTGLOSS prépare une structure et des indications. Il n'invente pas de données, de citations ou de références bibliographiques.")
+        if generated_text:
+            st.success("Votre rédaction complète a été générée par Gemini. Vérifiez les sources et les informations avant utilisation.")
+        elif is_full_draft:
+            st.warning("Le document généré est une trame de secours, pas une rédaction complète : configurez GEMINI_API_KEY pour activer Gemini.")
+        else:
+            st.success("Votre plan détaillé est prêt.")
+        st.info("CORRECTGLOSS ne fabrique pas de résultats de terrain, de chiffres ou de références bibliographiques.")
 
 if "cg_prepared_writing_docx" in st.session_state:
     writing_filename = st.session_state.get("cg_prepared_writing_name", "redaction")
