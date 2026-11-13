@@ -133,7 +133,7 @@ with st.form("cg_prepare_writing_form"):
         "Consignes particulières (facultatif)",
         placeholder="Ex. : parler du contexte malgache, citer des exemples, préciser la période étudiée..."
     )
-    writing_submit = st.form_submit_button("Préparer ma rédaction", type="primary")
+    writing_submit = st.form_submit_button("Générer la rédaction", type="primary")
 
 def cg_build_writing_outline(subject, kind, level, lang, instructions, full_draft):
     """Create a substantive editable starter draft without inventing research evidence."""
