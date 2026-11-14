@@ -218,8 +218,8 @@ def cg_generate_full_draft(subject, kind, level, lang, instructions, pages):
 
     target_words = max(280, int(pages) * 280)
     minimum_total_words = int(target_words * 0.90)
-    words_per_section = max(180, target_words // len(section_names))
-    minimum_section_words = max(150, int(words_per_section * 0.85))
+    words_per_section = max(60, target_words // len(section_names))
+    minimum_section_words = max(45, int(words_per_section * 0.90))
     signature = "||".join([subject.strip(), kind, level, lang, str(pages), instructions.strip()])
     if st.session_state.get("cg_writing_partial_signature") != signature:
         st.session_state["cg_writing_partial_signature"] = signature
