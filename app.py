@@ -315,7 +315,7 @@ if writing_submit:
         if generated_text:
             st.success("Votre rédaction complète a été générée par Gemini. Vérifiez les sources et les informations avant utilisation.")
         elif is_full_draft:
-            st.warning("Le document généré est une trame de secours, pas une rédaction complète : configurez GEMINI_API_KEY pour activer Gemini.")
+            st.warning("Gemini n’a pas pu produire la rédaction complète pendant cette tentative. Le document affiché est une trame de secours. Si GEMINI_API_KEY est déjà configurée, cette erreur peut être temporaire (serveur Gemini indisponible ou saturé) : réessayez plus tard. Vérifiez la clé uniquement si elle n’est pas encore enregistrée dans Streamlit Secrets.")
         else:
             st.success("Votre plan détaillé est prêt.")
         st.info("CORRECTGLOSS ne fabrique pas de résultats de terrain, de chiffres ou de références bibliographiques.")
