@@ -277,14 +277,29 @@ protocole à réaliser si les données ne sont pas fournies. Marque les élémen
                 "generationConfig": {"temperature": 0.45, "maxOutputTokens": 4096},
             }
             last_error = None
-            for attempt in range(2):
+            for attempt in range(4):
                 try:
                     response = requests.post(
                         request_url, headers=request_headers, json=payload, timeout=(15, 100)
                     )
-                    if response.status_code in (429, 500, 502, 503, 504) and attempt == 0:
-                        time.sleep(3)
-                        continue
+                    if response.status_code in (429, 500, 502, 503, 504):
+                        detail = ""
+                        try:
+                            detail = response.json().get("error", {}).get("message", "")
+                        except Exception:
+                            detail = (response.text or "")[:500]
+                        last_error = RuntimeError(
+                            f"Gemini HTTP {response.status_code}: {detail or response.reason}"
+                        )
+                        if attempt < 3:
+                            retry_after = response.headers.get("Retry-After")
+                            try:
+                                wait_seconds = min(60, max(5, int(float(retry_after)))) if retry_after else (5 * (2 ** attempt))
+                            except (TypeError, ValueError):
+                                wait_seconds = 5 * (2 ** attempt)
+                            time.sleep(wait_seconds)
+                            continue
+                        break
                     response.raise_for_status()
                     data = response.json()
                     candidates = data.get("candidates", [])
@@ -302,8 +317,8 @@ protocole à réaliser si les données ne sont pas fournies. Marque les élémen
                     break
                 except requests.RequestException as exc:
                     last_error = exc
-                    if attempt == 0:
-                        time.sleep(3)
+                    if attempt < 3:
+                        time.sleep(5 * (2 ** attempt))
                 except Exception as exc:
                     last_error = exc
                     break
@@ -316,6 +331,9 @@ protocole à réaliser si les données ne sont pas fournies. Marque les élémen
                     f"{section_name} : {last_error}"
                 )
             continuation_rounds += 1
+            # Small pause between section requests to reduce RPM spikes.
+            if section_words >= minimum_section_words and index < len(section_names) - 1:
+                time.sleep(2)
 
         completed[section_name] = section_text
         st.session_state["cg_writing_partial_sections"] = completed
