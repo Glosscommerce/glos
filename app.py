@@ -186,7 +186,7 @@ def cg_get_gemini_key():
 
 def cg_count_words(value):
     """Count words consistently for the requested-length check."""
-    return len(re.findall(r"\\b[\\wÀ-ÿ’'-]+\\b", str(value or ""), flags=re.UNICODE))
+    return len(re.findall(r"\b[\wÀ-ÿ’'-]+\b", str(value or ""), flags=re.UNICODE))
 
 
 def cg_generate_full_draft(subject, kind, level, lang, instructions, pages):
@@ -289,12 +289,12 @@ protocole à réaliser si les données ne sont pas fournies. Marque les élémen
                     data = response.json()
                     candidates = data.get("candidates", [])
                     parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
-                    new_text = "\\n".join(
+                    new_text = "\n".join(
                         part.get("text", "") for part in parts if part.get("text")
                     ).strip()
                     if not new_text:
                         raise RuntimeError("Gemini n'a retourné aucun texte pour : " + section_name)
-                    section_text = (section_text.rstrip() + "\\n\\n" + new_text).strip() if section_text else new_text
+                    section_text = (section_text.rstrip() + "\n\n" + new_text).strip() if section_text else new_text
                     section_words = cg_count_words(section_text)
                     completed[section_name] = section_text
                     st.session_state["cg_writing_partial_sections"] = completed
@@ -309,8 +309,8 @@ protocole à réaliser si les données ne sont pas fournies. Marque les élémen
                     break
 
             if last_error is not None:
-                partial = "\\n\\n".join(
-                    f"{name}\\n{completed[name]}" for name in section_names if completed.get(name)
+                partial = "\n\n".join(
+                    f"{name}\n{completed[name]}" for name in section_names if completed.get(name)
                 )
                 return partial, len([name for name in section_names if completed.get(name)]), (
                     f"{section_name} : {last_error}"
@@ -321,16 +321,16 @@ protocole à réaliser si les données ne sont pas fournies. Marque les élémen
         st.session_state["cg_writing_partial_sections"] = completed
 
         if section_words < minimum_section_words:
-            partial = "\\n\\n".join(
-                f"{name}\\n{completed[name]}" for name in section_names if completed.get(name)
+            partial = "\n\n".join(
+                f"{name}\n{completed[name]}" for name in section_names if completed.get(name)
             )
             return partial, len([name for name in section_names if completed.get(name)]), (
                 f"{section_name} reste trop courte ({section_words} mots ; "
                 f"{minimum_section_words} minimum). Cliquez à nouveau pour poursuivre."
             )
 
-    result = "\\n\\n".join(
-        f"{name}\\n{completed[name]}" for name in section_names if completed.get(name)
+    result = "\n\n".join(
+        f"{name}\n{completed[name]}" for name in section_names if completed.get(name)
     )
     total_words = cg_count_words(result)
     if total_words < minimum_total_words:
