@@ -113,7 +113,7 @@ with st.sidebar:
 
 st.divider()
 st.header("📝 Préparer une rédaction")
-st.caption("Préparez un plan ou un brouillon structuré. Cette fonction fonctionne sans API payante.")
+st.caption("La rédaction complète utilise Gemini. Objectif indicatif : environ 280 mots par page ; CORRECTGLOSS contrôle le volume et poursuit les sections trop courtes.")
 with st.form("cg_prepare_writing_form"):
     writing_mode = st.radio(
         "Que souhaitez-vous préparer ?",
@@ -184,8 +184,13 @@ def cg_get_gemini_key():
     return str(key).strip()
 
 
+def cg_count_words(value):
+    """Count words consistently for the requested-length check."""
+    return len(re.findall(r"\\b[\\wÀ-ÿ’'-]+\\b", str(value or ""), flags=re.UNICODE))
+
+
 def cg_generate_full_draft(subject, kind, level, lang, instructions, pages):
-    """Generate a long draft section by section and retain completed sections for retry."""
+    """Generate and expand each section until the requested word target is reached."""
     api_key = cg_get_gemini_key()
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY n'est pas configurée dans Streamlit Cloud > Settings > Secrets.")
@@ -212,7 +217,9 @@ def cg_generate_full_draft(subject, kind, level, lang, instructions, pages):
         language_rule = "Write entirely in English."
 
     target_words = max(280, int(pages) * 280)
+    minimum_total_words = int(target_words * 0.90)
     words_per_section = max(180, target_words // len(section_names))
+    minimum_section_words = max(150, int(words_per_section * 0.85))
     signature = "||".join([subject.strip(), kind, level, lang, str(pages), instructions.strip()])
     if st.session_state.get("cg_writing_partial_signature") != signature:
         st.session_state["cg_writing_partial_signature"] = signature
@@ -223,71 +230,120 @@ def cg_generate_full_draft(subject, kind, level, lang, instructions, pages):
     request_headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
 
     for index, section_name in enumerate(section_names):
-        if completed.get(section_name):
-            continue
-        prompt = f"""
-Tu es un assistant de rédaction académique. Rédige uniquement la section demandée,
-avec un contenu développé, précis, cohérent et directement exploitable.
+        section_text = completed.get(section_name, "")
+        section_words = cg_count_words(section_text)
+        continuation_rounds = 0
+
+        while section_words < minimum_section_words and continuation_rounds < 3:
+            missing_words = max(100, words_per_section - section_words)
+            if section_text:
+                prompt = f"""
+Tu poursuis la rédaction académique de la section ci-dessous.
+Sujet : {subject}
+Type : {kind} | Niveau : {level}
+Consignes : {instructions or "Aucune consigne supplémentaire."}
+{language_rule}
+Section : {section_name}
+Texte déjà rédigé :
+{section_text}
+Le texte existant contient environ {section_words} mots. Ajoute environ {missing_words} mots
+supplémentaires pour atteindre au moins {minimum_section_words} mots au total dans cette section.
+Continue directement avec de nouveaux paragraphes utiles, sans répéter, résumer ou reformuler
+les paragraphes déjà présents. Développe les explications, exemples généraux clairement identifiés,
+arguments, transitions et limites pertinentes. N'invente jamais de résultats d'enquête, chiffres,
+citations, auteurs ou références bibliographiques. Pour un mémoire, présente les résultats comme
+à collecter si les données ne sont pas fournies. Retourne uniquement le passage à ajouter.
+"""
+            else:
+                prompt = f"""
+Tu es un assistant de rédaction académique. Rédige une section substantielle et développée.
 Sujet : {subject}
 Type : {kind}
 Niveau : {level}
 Consignes : {instructions or "Aucune consigne supplémentaire."}
 {language_rule}
-Longueur indicative de cette section : environ {words_per_section} mots.
 Section à rédiger : {section_name}
 Plan global : {" ; ".join(section_names)}
-Développe les idées, explique les concepts, construis des paragraphes argumentés et assure les transitions.
-Ne répète pas l'introduction ni les autres parties. N'invente jamais de résultats d'enquête,
-de chiffres, de citations, d'auteurs ou de références bibliographiques.
-Pour un mémoire, présente la méthodologie comme un protocole à réaliser si les données ne sont pas fournies.
-Ne prétends pas qu'une enquête a déjà été menée. Marque les éléments manquants par [DONNÉE À VÉRIFIER]
-ou [SOURCE À AJOUTER]. Retourne uniquement le texte de cette section.
+Longueur exigée : environ {words_per_section} mots pour cette section, et au minimum
+{minimum_section_words} mots. Ne livre pas un simple résumé ou une liste de titres.
+Construis plusieurs paragraphes argumentés, explique les concepts et assure les transitions.
+Ne répète pas les autres parties. N'invente jamais de résultats d'enquête, chiffres, citations,
+auteurs ou références bibliographiques. Pour un mémoire, présente la méthodologie comme un
+protocole à réaliser si les données ne sont pas fournies. Marque les éléments manquants par
+[DONNÉE À VÉRIFIER] ou [SOURCE À AJOUTER]. Retourne uniquement le texte de cette section.
 """
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.55, "maxOutputTokens": 4096},
-        }
-        last_error = None
-        for attempt in range(2):
-            try:
-                response = requests.post(
-                    request_url, headers=request_headers, json=payload, timeout=(15, 100)
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.45, "maxOutputTokens": 4096},
+            }
+            last_error = None
+            for attempt in range(2):
+                try:
+                    response = requests.post(
+                        request_url, headers=request_headers, json=payload, timeout=(15, 100)
+                    )
+                    if response.status_code in (429, 500, 502, 503, 504) and attempt == 0:
+                        time.sleep(3)
+                        continue
+                    response.raise_for_status()
+                    data = response.json()
+                    candidates = data.get("candidates", [])
+                    parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+                    new_text = "\\n".join(
+                        part.get("text", "") for part in parts if part.get("text")
+                    ).strip()
+                    if not new_text:
+                        raise RuntimeError("Gemini n'a retourné aucun texte pour : " + section_name)
+                    section_text = (section_text.rstrip() + "\\n\\n" + new_text).strip() if section_text else new_text
+                    section_words = cg_count_words(section_text)
+                    completed[section_name] = section_text
+                    st.session_state["cg_writing_partial_sections"] = completed
+                    last_error = None
+                    break
+                except requests.RequestException as exc:
+                    last_error = exc
+                    if attempt == 0:
+                        time.sleep(3)
+                except Exception as exc:
+                    last_error = exc
+                    break
+
+            if last_error is not None:
+                partial = "\\n\\n".join(
+                    f"{name}\\n{completed[name]}" for name in section_names if completed.get(name)
                 )
-                if response.status_code in (429, 500, 502, 503, 504) and attempt == 0:
-                    time.sleep(3)
-                    continue
-                response.raise_for_status()
-                data = response.json()
-                candidates = data.get("candidates", [])
-                parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
-                section_text = "\n".join(
-                    part.get("text", "") for part in parts if part.get("text")
-                ).strip()
-                if not section_text:
-                    raise RuntimeError("Gemini n'a retourné aucun texte pour : " + section_name)
-                completed[section_name] = section_text
-                st.session_state["cg_writing_partial_sections"] = completed
-                last_error = None
-                break
-            except requests.RequestException as exc:
-                last_error = exc
-                if attempt == 0:
-                    time.sleep(3)
-            except Exception as exc:
-                last_error = exc
-                break
+                return partial, len([name for name in section_names if completed.get(name)]), (
+                    f"{section_name} : {last_error}"
+                )
+            continuation_rounds += 1
 
-        if last_error is not None:
-            partial = "\n\n".join(
-                f"{name}\n{completed[name]}" for name in section_names if completed.get(name)
+        completed[section_name] = section_text
+        st.session_state["cg_writing_partial_sections"] = completed
+
+        if section_words < minimum_section_words:
+            partial = "\\n\\n".join(
+                f"{name}\\n{completed[name]}" for name in section_names if completed.get(name)
             )
-            return partial, len(completed), f"{section_name} : {last_error}"
+            return partial, len([name for name in section_names if completed.get(name)]), (
+                f"{section_name} reste trop courte ({section_words} mots ; "
+                f"{minimum_section_words} minimum). Cliquez à nouveau pour poursuivre."
+            )
 
-    result = "\n\n".join(
-        f"{name}\n{completed[name]}" for name in section_names if completed.get(name)
+    result = "\\n\\n".join(
+        f"{name}\\n{completed[name]}" for name in section_names if completed.get(name)
     )
+    total_words = cg_count_words(result)
+    if total_words < minimum_total_words:
+        return result, len(section_names), (
+            f"Le document contient {total_words} mots sur {target_words} attendus. "
+            "Une nouvelle génération est nécessaire pour compléter le volume."
+        )
+
     st.session_state.pop("cg_writing_partial_signature", None)
     st.session_state.pop("cg_writing_partial_sections", None)
+    st.session_state["cg_writing_last_target_words"] = target_words
+    st.session_state["cg_writing_last_actual_words"] = total_words
+    st.session_state["cg_writing_last_target_pages"] = int(pages)
     return result, len(section_names), None
 
 
@@ -368,7 +424,8 @@ if writing_submit:
             r"[^A-Za-z0-9_-]+", "_", writing_subject.strip()
         )[:50] or "redaction"
         if is_full_draft and generation_complete:
-            st.success("Rédaction complète générée par Gemini, section par section. Vérifiez les sources et les informations avant utilisation.")
+            actual_words = cg_count_words(generated_text)
+            st.success(f"Rédaction complète générée : {actual_words} mots pour environ {writing_pages} page(s) demandée(s). Vérifiez la mise en page et les sources avant utilisation.")
         elif is_full_draft and generated_text:
             st.warning(f"Rédaction partielle enregistrée ({completed_count} section(s) terminée(s)). Erreur : {generation_error}. Cliquez de nouveau sur « Générer la rédaction » pour reprendre sans perdre les sections déjà produites.")
         elif is_full_draft:
