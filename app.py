@@ -5,6 +5,7 @@ from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import requests
+import time
 from correction_engine import correct_docx_with_languagetool, analyze_document_structure
 from export_engine import add_page_numbers, apply_academic_heading_styles, build_pdf_from_docx
 
@@ -208,13 +209,25 @@ N'invente jamais de résultats d'enquête, chiffres, citations, auteurs ou réf�
 Signale les informations manquantes par [DONNÉE À VÉRIFIER] ou [SOURCE À AJOUTER].
 Ne prétends pas qu'une enquête a déjà été menée. Retourne uniquement le document rédigé.
 """
-    response = requests.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
-        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-        json={"contents": [{"parts": [{"text": prompt}]}],
-              "generationConfig": {"temperature": 0.65, "maxOutputTokens": 8192}},
-        timeout=180,
-    )
+    request_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
+    request_headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+    request_payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.65, "maxOutputTokens": 8192},
+    }
+
+    # Retry temporary Gemini capacity errors with exponential backoff.
+    response = None
+    for attempt in range(4):
+        response = requests.post(
+            request_url,
+            headers=request_headers,
+            json=request_payload,
+            timeout=180,
+        )
+        if response.status_code not in (502, 503, 504) or attempt == 3:
+            break
+        time.sleep(2 ** (attempt + 1))  # 2 s, 4 s, then 8 s
     response.raise_for_status()
     data = response.json()
     candidates = data.get("candidates", [])
