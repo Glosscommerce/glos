@@ -209,7 +209,7 @@ Signale les informations manquantes par [DONNÉE À VÉRIFIER] ou [SOURCE À AJO
 Ne prétends pas qu'une enquête a déjà été menée. Retourne uniquement le document rédigé.
 """
     response = requests.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
         headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
         json={"contents": [{"parts": [{"text": prompt}]}],
               "generationConfig": {"temperature": 0.65, "maxOutputTokens": 8192}},
