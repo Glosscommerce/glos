@@ -185,57 +185,110 @@ def cg_get_gemini_key():
 
 
 def cg_generate_full_draft(subject, kind, level, lang, instructions, pages):
-    """Generate a complete editable draft with Gemini without inventing evidence."""
+    """Generate a long draft section by section and retain completed sections for retry."""
     api_key = cg_get_gemini_key()
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY n'est pas configurée dans Streamlit Cloud > Settings > Secrets.")
-    target_words = int(pages) * 280
-    language_rule = "Rédige entièrement en français." if lang == "Français" else "Write entirely in English."
-    prompt = f"""
-Tu es un assistant de rédaction académique. Produis un véritable document complet et développé,
-pas un plan, pas une liste de conseils et pas des paragraphes à compléter.
+
+    is_research = kind == "Mémoire / Projet de recherche"
+    if lang == "Français":
+        section_names = (
+            ["INTRODUCTION GÉNÉRALE", "PARTIE I — CADRE CONCEPTUEL ET THÉORIQUE",
+             "PARTIE II — CADRE MÉTHODOLOGIQUE", "PARTIE III — ANALYSE ET DISCUSSION",
+             "CONCLUSION GÉNÉRALE"]
+            if is_research else
+            ["INTRODUCTION", "PREMIÈRE PARTIE — DÉVELOPPEMENT", "DEUXIÈME PARTIE — DÉVELOPPEMENT",
+             "TROISIÈME PARTIE — DISCUSSION", "CONCLUSION"]
+        )
+        language_rule = "Rédige entièrement en français."
+    else:
+        section_names = (
+            ["GENERAL INTRODUCTION", "PART I — CONCEPTUAL AND THEORETICAL FRAMEWORK",
+             "PART II — METHODOLOGY", "PART III — ANALYSIS AND DISCUSSION", "GENERAL CONCLUSION"]
+            if is_research else
+            ["INTRODUCTION", "PART ONE — MAIN DISCUSSION", "PART TWO — MAIN DISCUSSION",
+             "PART THREE — DISCUSSION", "CONCLUSION"]
+        )
+        language_rule = "Write entirely in English."
+
+    target_words = max(280, int(pages) * 280)
+    words_per_section = max(180, target_words // len(section_names))
+    signature = "||".join([subject.strip(), kind, level, lang, str(pages), instructions.strip()])
+    if st.session_state.get("cg_writing_partial_signature") != signature:
+        st.session_state["cg_writing_partial_signature"] = signature
+        st.session_state["cg_writing_partial_sections"] = {}
+
+    completed = st.session_state.setdefault("cg_writing_partial_sections", {})
+    request_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
+    request_headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+
+    for index, section_name in enumerate(section_names):
+        if completed.get(section_name):
+            continue
+        prompt = f"""
+Tu es un assistant de rédaction académique. Rédige uniquement la section demandée,
+avec un contenu développé, précis, cohérent et directement exploitable.
 Sujet : {subject}
 Type : {kind}
 Niveau : {level}
-Langue : {lang}
-Longueur cible : environ {target_words} mots (environ {pages} pages).
 Consignes : {instructions or "Aucune consigne supplémentaire."}
 {language_rule}
-Utilise des titres clairs, une introduction développée, des parties argumentées avec transitions
-et une conclusion qui répond au sujet. Pour un mémoire/projet de recherche, développe le contexte,
-la problématique, les questions, les objectifs, les hypothèses, le cadre théorique et conceptuel,
-la méthodologie et les axes d'analyse.
-N'invente jamais de résultats d'enquête, chiffres, citations, auteurs ou références bibliographiques.
-Signale les informations manquantes par [DONNÉE À VÉRIFIER] ou [SOURCE À AJOUTER].
-Ne prétends pas qu'une enquête a déjà été menée. Retourne uniquement le document rédigé.
+Longueur indicative de cette section : environ {words_per_section} mots.
+Section à rédiger : {section_name}
+Plan global : {" ; ".join(section_names)}
+Développe les idées, explique les concepts, construis des paragraphes argumentés et assure les transitions.
+Ne répète pas l'introduction ni les autres parties. N'invente jamais de résultats d'enquête,
+de chiffres, de citations, d'auteurs ou de références bibliographiques.
+Pour un mémoire, présente la méthodologie comme un protocole à réaliser si les données ne sont pas fournies.
+Ne prétends pas qu'une enquête a déjà été menée. Marque les éléments manquants par [DONNÉE À VÉRIFIER]
+ou [SOURCE À AJOUTER]. Retourne uniquement le texte de cette section.
 """
-    request_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
-    request_headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
-    request_payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.65, "maxOutputTokens": 8192},
-    }
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.55, "maxOutputTokens": 4096},
+        }
+        last_error = None
+        for attempt in range(2):
+            try:
+                response = requests.post(
+                    request_url, headers=request_headers, json=payload, timeout=(15, 100)
+                )
+                if response.status_code in (429, 500, 502, 503, 504) and attempt == 0:
+                    time.sleep(3)
+                    continue
+                response.raise_for_status()
+                data = response.json()
+                candidates = data.get("candidates", [])
+                parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+                section_text = "\n".join(
+                    part.get("text", "") for part in parts if part.get("text")
+                ).strip()
+                if not section_text:
+                    raise RuntimeError("Gemini n'a retourné aucun texte pour : " + section_name)
+                completed[section_name] = section_text
+                st.session_state["cg_writing_partial_sections"] = completed
+                last_error = None
+                break
+            except requests.RequestException as exc:
+                last_error = exc
+                if attempt == 0:
+                    time.sleep(3)
+            except Exception as exc:
+                last_error = exc
+                break
 
-    # Retry temporary Gemini capacity errors with exponential backoff.
-    response = None
-    for attempt in range(4):
-        response = requests.post(
-            request_url,
-            headers=request_headers,
-            json=request_payload,
-            timeout=180,
-        )
-        if response.status_code not in (502, 503, 504) or attempt == 3:
-            break
-        time.sleep(2 ** (attempt + 1))  # 2 s, 4 s, then 8 s
-    response.raise_for_status()
-    data = response.json()
-    candidates = data.get("candidates", [])
-    parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
-    result = "\n".join(part.get("text", "") for part in parts if part.get("text"))
-    if not result.strip():
-        raise RuntimeError("Gemini n'a retourné aucun texte.")
-    return result.strip()
+        if last_error is not None:
+            partial = "\n\n".join(
+                f"{name}\n{completed[name]}" for name in section_names if completed.get(name)
+            )
+            return partial, len(completed), f"{section_name} : {last_error}"
+
+    result = "\n\n".join(
+        f"{name}\n{completed[name]}" for name in section_names if completed.get(name)
+    )
+    st.session_state.pop("cg_writing_partial_signature", None)
+    st.session_state.pop("cg_writing_partial_sections", None)
+    return result, len(section_names), None
 
 
 if writing_submit:
@@ -244,17 +297,19 @@ if writing_submit:
     else:
         is_full_draft = writing_mode.startswith("Rédaction complète")
         generated_text = ""
+        generation_error = None
+        generation_complete = False
         if is_full_draft:
-            with st.spinner("Gemini prépare votre rédaction complète..."):
+            with st.spinner("Gemini rédige votre document section par section. Les sections terminées sont conservées..."):
                 try:
-                    generated_text = cg_generate_full_draft(
+                    generated_text, completed_count, generation_error = cg_generate_full_draft(
                         writing_subject.strip(), writing_type, writing_level,
                         writing_language, writing_instructions, writing_pages
                     )
-                except requests.HTTPError as e:
-                    st.error(f"Erreur Gemini API : {e}. Vérifiez la clé, le quota et le modèle utilisé.")
+                    generation_complete = generation_error is None
                 except Exception as e:
-                    st.error(f"Rédaction complète indisponible : {e}")
+                    generation_error = str(e)
+                    st.error(f"Rédaction complète indisponible : {generation_error}")
 
         prepared_doc = Document()
         prepared_doc.add_heading(writing_subject.strip(), 0)
@@ -312,10 +367,12 @@ if writing_submit:
         st.session_state["cg_prepared_writing_name"] = re.sub(
             r"[^A-Za-z0-9_-]+", "_", writing_subject.strip()
         )[:50] or "redaction"
-        if generated_text:
-            st.success("Votre rédaction complète a été générée par Gemini. Vérifiez les sources et les informations avant utilisation.")
+        if is_full_draft and generation_complete:
+            st.success("Rédaction complète générée par Gemini, section par section. Vérifiez les sources et les informations avant utilisation.")
+        elif is_full_draft and generated_text:
+            st.warning(f"Rédaction partielle enregistrée ({completed_count} section(s) terminée(s)). Erreur : {generation_error}. Cliquez de nouveau sur « Générer la rédaction » pour reprendre sans perdre les sections déjà produites.")
         elif is_full_draft:
-            st.warning("Gemini n’a pas pu produire la rédaction complète pendant cette tentative. Le document affiché est une trame de secours. Si GEMINI_API_KEY est déjà configurée, cette erreur peut être temporaire (serveur Gemini indisponible ou saturé) : réessayez plus tard. Vérifiez la clé uniquement si elle n’est pas encore enregistrée dans Streamlit Secrets.")
+            st.warning(f"Gemini n’a pas encore produit de section complète : {generation_error or 'erreur temporaire'}. Réessayez. La trame de secours reste disponible.")
         else:
             st.success("Votre plan détaillé est prêt.")
         st.info("CORRECTGLOSS ne fabrique pas de résultats de terrain, de chiffres ou de références bibliographiques.")
