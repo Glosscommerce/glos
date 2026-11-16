@@ -120,9 +120,9 @@ if bibliography:
         }
     elif any(term in current_topic for term in ("girofle", "clove", "cloves")):
         group_details = {
-            "A": ("A — Références directes", "Girofle malgache avec des éléments explicites sur la qualité ET l’exportation/compétitivité."),
-            "B": ("B — Références sur le girofle", "Études sur le girofle ou la filière malgache, sans couvrir explicitement tous les axes du sujet."),
-            "C": ("C — Références contextuelles", "Sources utiles sur la qualité, les marchés ou l’exportation à Madagascar, sans mention explicite du girofle."),
+            "A": ("A — Références centrées sur le girofle malgache", "Le titre identifie le girofle malgache et la notice contient des éléments sur la qualité et l’exportation/compétitivité."),
+            "B": ("B — Références sur le girofle ou comparatives", "Études sur le girofle, y compris les comparaisons internationales où Madagascar peut être seulement cité dans le résumé."),
+            "C": ("C — Références contextuelles", "Sources utiles sur la qualité, les marchés ou l’exportation à Madagascar, sans traiter explicitement du girofle."),
         }
     else:
         group_details = {
@@ -181,7 +181,7 @@ if bibliography:
                         st.caption("Notice fournie par : " + str(item["metadata_source"]))
                     if item.get("metadata_completeness") is not None:
                         completeness = round(float(item["metadata_completeness"]) * 100)
-                        st.caption(f"Complétude des champs disponibles : {completeness} % (titre, auteur, année, DOI, résumé)")
+                        st.caption(f"Champs bibliographiques renseignés : {completeness} % (titre, auteur, année, DOI, résumé) — ce n’est pas un score de fiabilité.")
                     if item.get("missing_metadata_fields"):
                         st.caption("Champs absents : " + ", ".join(item["missing_metadata_fields"]))
                     if item.get("metadata_status"):
