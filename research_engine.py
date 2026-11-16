@@ -466,12 +466,18 @@ def search_bibliography(topic: str, max_results: int = 8):
             has_clove = bool(title_body & clove_words)
             has_madagascar = madagascar_match
 
-            if has_clove and has_madagascar and quality_hits and export_hits:
+            # A = preuve forte dans le titre : girofle + Madagascar.
+            # Une simple mention de Madagascar dans un résumé comparatif
+            # (ex. étude de la compétitivité indonésienne) ne suffit jamais.
+            if has_clove and madagascar_title_match and quality_hits and export_hits:
                 relevance_group = "A"
-                relevance_reason = "Référence directe : girofle malgache avec des éléments sur la qualité et l'exportation/compétitivité. Vérifier le document original."
-            elif has_clove and (has_madagascar or export_hits):
+                relevance_reason = "Forte correspondance : le titre identifie le girofle malgache et la notice contient des éléments sur la qualité et l'exportation/compétitivité. Vérifier le document original."
+            elif has_clove and (madagascar_match or export_hits):
                 relevance_group = "B"
-                relevance_reason = "Référence sur le girofle ou la filière malgache, mais elle ne couvre pas explicitement tous les axes qualité et exportation/compétitivité."
+                if has_clove and not madagascar_title_match and madagascar_match:
+                    relevance_reason = "Référence comparative sur le girofle : Madagascar est seulement mentionné dans le résumé, le titre ne présente pas une étude centrée sur le girofle malgache."
+                else:
+                    relevance_reason = "Référence sur le girofle ou la filière malgache, mais elle ne couvre pas explicitement tous les axes qualité et exportation/compétitivité."
             elif has_madagascar and (quality_hits or export_hits):
                 relevance_group = "C"
                 relevance_reason = "Référence contextuelle sur Madagascar et un axe qualité/exportation, sans mention explicite du girofle."
