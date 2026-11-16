@@ -533,18 +533,32 @@ def search_bibliography(topic: str, max_results: int = 8):
             and (title_terms & distinctive_topic_terms)
             and not abstract_has_topic
         )
-        metadata_status = (
-            "ALERTE : le résumé semble concerner une autre filière que le titre ; ne pas citer avant vérification."
-            if abstract_crop_mismatch else
-            "ALERTE : les mots distinctifs du thème apparaissent dans le titre mais pas dans le résumé ; vérifier la notice originale."
-            if abstract_topic_mismatch else
-            "Notice bibliographique non validée automatiquement : le lien peut être accessible sans que le titre, les auteurs ou le contenu soient confirmés."
-        )
+        author_list = list(dict.fromkeys(
+            re.sub(r"\\s+", " ", str(a or "")).strip()
+            for a in (authors or []) if str(a or "").strip()
+        ))
+        missing_fields = []
+        if not author_list:
+            missing_fields.append("auteur")
+        if not year:
+            missing_fields.append("année")
+        if not doi:
+            missing_fields.append("DOI")
+        if not abstract:
+            missing_fields.append("résumé")
+        if abstract_crop_mismatch:
+            metadata_status = "ALERTE : le résumé semble concerner une autre filière que le titre ; ne pas citer avant vérification."
+        elif abstract_topic_mismatch:
+            metadata_status = "ALERTE : les mots distinctifs du thème apparaissent dans le titre mais pas dans le résumé ; vérifier la notice originale."
+        elif missing_fields:
+            metadata_status = "Notice incomplète — champ(s) absent(s) : " + ", ".join(missing_fields) + ". Les données viennent du catalogue et ne sont pas certifiées."
+        else:
+            metadata_status = "Champs bibliographiques présents dans le catalogue ; exactitude du contenu et qualité scientifique non certifiées."
+        metadata_completeness = round((5 - len(missing_fields)) / 5, 2)
         key = (category, _normalise(title))
         if key in seen:
             return
         seen.add(key)
-        author_list = [str(a).strip() for a in (authors or []) if str(a).strip()]
         details = []
         if doi:
             details.append("DOI : " + str(doi).replace("https://doi.org/", ""))
@@ -583,6 +597,10 @@ def search_bibliography(topic: str, max_results: int = 8):
             "relevance_group": relevance_group,
             "relevance_reason": relevance_reason,
             "metadata_status": metadata_status,
+            "metadata_completeness": metadata_completeness,
+            "missing_metadata_fields": missing_fields,
+            "metadata_source": provider or "Catalogue non précisé",
+            "metadata_is_catalog_record": True,
             "snippet": " | ".join(details),
         }
         output[category].append(reference)
