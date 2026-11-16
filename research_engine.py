@@ -188,10 +188,92 @@ def search_web(query: str, max_results: int = 8):
                 break
         except Exception as exc:
             backend_errors.append(f"{backend}: {str(exc)[:160]}")
-    if not raw and backend_errors:
+    # Repli automatique vers des catalogues académiques publics.
+    # Il ne dépend pas des moteurs DDG/Bing/Brave et ne nécessite aucune clé API.
+    fallback_errors = []
+    if not raw:
+        headers = {"User-Agent": "CORRECTGLOSS/3.0 (public academic search)"}
+        try:
+            response = requests.get(
+                "https://api.openalex.org/works",
+                params={
+                    "search": query,
+                    "per-page": requested_results,
+                    "select": "doi,display_name,publication_year,type,authorships,primary_location,abstract_inverted_index",
+                },
+                headers=headers,
+                timeout=(5, 15),
+            )
+            response.raise_for_status()
+            for work in response.json().get("results", []):
+                title = work.get("display_name") or ""
+                location = work.get("primary_location") or {}
+                doi = work.get("doi")
+                href = location.get("landing_page_url") or doi or ""
+                if not href and work.get("id"):
+                    href = work["id"]
+                authors = [
+                    (entry.get("author") or {}).get("display_name", "")
+                    for entry in work.get("authorships", [])
+                ]
+                abstract = _openalex_abstract(work.get("abstract_inverted_index"))
+                body = abstract or (
+                    "Publication académique indexée par OpenAlex. "
+                    + ", ".join(authors[:5])
+                )
+                if title and href:
+                    raw.append({
+                        "title": title,
+                        "href": href,
+                        "body": body,
+                        "provider": "OpenAlex",
+                    })
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            fallback_errors.append("OpenAlex : " + str(exc)[:140])
+
+        # Crossref complète OpenAlex lorsque celui-ci ne renvoie rien.
+        if not raw:
+            try:
+                response = requests.get(
+                    "https://api.crossref.org/works",
+                    params={"query.bibliographic": query, "rows": requested_results},
+                    headers=headers,
+                    timeout=(5, 15),
+                )
+                response.raise_for_status()
+                for work in response.json().get("message", {}).get("items", []):
+                    title = (work.get("title") or [""])[0]
+                    doi = work.get("DOI")
+                    href = ("https://doi.org/" + doi) if doi else work.get("URL", "")
+                    authors = [
+                        " ".join(filter(None, [a.get("given"), a.get("family")]))
+                        for a in work.get("author", [])
+                    ]
+                    year_parts = (
+                        work.get("published", {}).get("date-parts") or [[None]]
+                    )[0]
+                    year = year_parts[0] if year_parts else None
+                    body = "Notice Crossref"
+                    if year:
+                        body += " — " + str(year)
+                    if authors:
+                        body += " — " + ", ".join(authors[:5])
+                    if title and href:
+                        raw.append({
+                            "title": title,
+                            "href": href,
+                            "body": body,
+                            "provider": "Crossref",
+                        })
+            except (requests.RequestException, ValueError, TypeError, IndexError) as exc:
+                fallback_errors.append("Crossref : " + str(exc)[:140])
+
+    if not raw:
+        diagnostics = backend_errors + fallback_errors
+        detail = " | ".join(diagnostics) if diagnostics else "Aucun résultat pertinent retourné."
         raise RuntimeError(
-            "Les moteurs de recherche sont temporairement indisponibles. "
-            + " | ".join(backend_errors)
+            "Aucun résultat disponible pour le moment. Les moteurs Web et les catalogues "
+            "académiques publics n'ont pas fourni de notice. " + detail
         )
     cleaned, seen = [], set()
     for item in raw or []:
@@ -226,6 +308,7 @@ def search_web(query: str, max_results: int = 8):
         cleaned.append({
             "title": title[:300], "url": url, "snippet": body[:1200],
             "relevance": round(score, 2),
+            "provider": item.get("provider") or "Recherche Web",
         })
     cleaned.sort(key=lambda item: item["relevance"], reverse=True)
     selected = cleaned[:max(1, min(int(max_results), 10))]
