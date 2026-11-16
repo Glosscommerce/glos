@@ -126,9 +126,9 @@ if bibliography:
         }
     else:
         group_details = {
-            "A": ("A — Références directes", "Travaux correspondant directement aux termes distinctifs du sujet."),
-            "B": ("B — Références partiellement concordantes", "Plusieurs termes distinctifs correspondent ; vérifier le résumé et le document original."),
-            "C": ("C — Références contextuelles", "Correspondance limitée ; utiliser seulement comme contexte après vérification."),
+            "A": ("A — Forte correspondance textuelle", "Les termes distinctifs concordent dans les champs indexés ; cela ne certifie ni le document ni sa qualité scientifique."),
+            "B": ("B — Correspondance partielle", "Plusieurs indices concordent ; vérifier le résumé et le document original."),
+            "C": ("C — Référence contextuelle", "Correspondance limitée ; utiliser comme contexte seulement après vérification."),
         }
     reference_categories = ["Articles scientifiques", "Livres", "Documents, mémoires et thèses"]
     for group in ("A", "B", "C"):
@@ -177,6 +177,13 @@ if bibliography:
                         st.caption(item["link_detail"])
                     if item.get("final_url") and item.get("final_url") != item.get("url"):
                         st.caption("Adresse finale après redirection : " + str(item["final_url"]))
+                    if item.get("metadata_source"):
+                        st.caption("Notice fournie par : " + str(item["metadata_source"]))
+                    if item.get("metadata_completeness") is not None:
+                        completeness = round(float(item["metadata_completeness"]) * 100)
+                        st.caption(f"Complétude des champs disponibles : {completeness} % (titre, auteur, année, DOI, résumé)")
+                    if item.get("missing_metadata_fields"):
+                        st.caption("Champs absents : " + ", ".join(item["missing_metadata_fields"]))
                     if item.get("metadata_status"):
                         st.warning(item["metadata_status"])
                     if item.get("relevance_reason"):
