@@ -534,7 +534,7 @@ def search_bibliography(topic: str, max_results: int = 8):
             and not abstract_has_topic
         )
         author_list = list(dict.fromkeys(
-            re.sub(r"\\s+", " ", str(a or "")).strip()
+            re.sub(r"\s+", " ", str(a or "")).strip()
             for a in (authors or []) if str(a or "").strip()
         ))
         missing_fields = []
