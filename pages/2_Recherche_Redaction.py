@@ -80,6 +80,7 @@ if results:
             st.link_button("Ouvrir la source dans un nouvel onglet", source_url, key=f"web_source_{i}")
         if item.get("snippet"):
             st.write(item["snippet"])
+        st.caption("Source de recherche : " + str(item.get("provider") or "Moteur Web"))
         st.caption(f"Pertinence indicative : {round(float(item.get('relevance', 0)) * 100)} %")
         if item.get("link_label"):
             st.caption("Vérification du lien : " + item["link_label"])
