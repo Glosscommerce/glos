@@ -596,7 +596,7 @@ def search_bibliography(topic: str, max_results: int = 8):
         if work_type:
             details.append("Type : " + str(work_type))
         if abstract:
-            details.append("Résumé : " + re.sub(r"\s+", " ", str(abstract))[:650])
+            details.append("Résumé : " + re.sub(r"\s+", " ", str(abstract))[:2500])
         link_check = _check_link_details(url, doi)
         short_link_status = {
             "pdf": "Le serveur indique un PDF — ouverture dans le navigateur non garantie",
