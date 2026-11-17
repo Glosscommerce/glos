@@ -22,7 +22,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Check V3 Python syntax
-        run: python -m py_compile v3_app.py v3_free/ai_provider.py v3_free/assistant.py v3_free/long_writer.py v3_free/document_export.py
-      - name: Run V3 export tests
-        run: python -m unittest tests.test_v3_documents -v
+      - name: Check V3 and shared engine Python syntax
+        run: |
+          python -m py_compile \
+            v3_app.py \
+            v3_free/ai_provider.py \
+            v3_free/assistant.py \
+            v3_free/long_writer.py \
+            v3_free/document_export.py \
+            correction_engine.py \
+            research_engine.py \
+            export_engine.py
+      - name: Run all automated tests
+        run: python -m unittest discover -s tests -v
