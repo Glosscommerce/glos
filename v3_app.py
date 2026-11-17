@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import os
+from io import BytesIO
+
 import streamlit as st
+from docx import Document
 
 try:
     for key in (
@@ -21,6 +24,10 @@ from v3_free.ai_provider import (  # noqa: E402
 from v3_free.assistant import answer_question  # noqa: E402
 from v3_free.long_writer import create_outline, write_section  # noqa: E402
 from v3_free.document_export import build_docx, build_pdf  # noqa: E402
+from correction_engine import (  # noqa: E402
+    analyze_document_structure, correct_docx_with_languagetool,
+)
+from export_engine import build_pdf_from_docx  # noqa: E402
 
 st.set_page_config(
     page_title="CORRECTGLOSS V3",
@@ -59,7 +66,112 @@ if "cg_sections" not in st.session_state:
 if "cg_generated_section" not in st.session_state:
     st.session_state.cg_generated_section = ""
 
-assistant_tab, writing_tab = st.tabs(["💬 Assistant intelligent", "📝 Recherche & rédaction"])
+assistant_tab, writing_tab, correction_tab = st.tabs([
+    "💬 Assistant intelligent", "📝 Recherche & rédaction", "✍️ Correction de documents"
+])
+
+
+with correction_tab:
+    st.subheader("Correction automatique de fichiers Word")
+    st.write(
+        "Importez un document .docx pour corriger l’orthographe, la grammaire, "
+        "les accords et certaines erreurs de conjugaison. Le moteur en ligne "
+        "LanguageTool est nécessaire pour l’analyse complète."
+    )
+    st.warning(
+        "La correction automatique peut modifier une formulation à tort. "
+        "Conservez l’original et relisez toujours le document corrigé."
+    )
+    correction_language = st.selectbox(
+        "Langue du document à corriger",
+        ["Français", "English"],
+        key="cg_correction_language",
+    )
+    uploaded_docx = st.file_uploader(
+        "Importer un document Word (.docx)",
+        type=["docx"],
+        key="cg_docx_upload",
+    )
+    if uploaded_docx is not None:
+        st.caption(f"Fichier sélectionné : {uploaded_docx.name}")
+        if st.button("Lancer la correction automatique", type="primary", key="cg_run_correction"):
+            try:
+                source_bytes = uploaded_docx.getvalue()
+                source_document = Document(BytesIO(source_bytes))
+                diagnostics = analyze_document_structure(source_document)
+                language_code = "fr" if correction_language == "Français" else "en-US"
+                with st.spinner("Analyse et correction du document…"):
+                    corrected_document, applied, skipped, detected, suggestions = (
+                        correct_docx_with_languagetool(source_document, language_code)
+                    )
+                output = BytesIO()
+                corrected_document.save(output)
+                st.session_state.cg_corrected_docx = output.getvalue()
+                st.session_state.cg_correction_report = {
+                    "filename": uploaded_docx.name,
+                    "detected": detected,
+                    "applied": applied,
+                    "skipped": skipped,
+                    "suggestions": suggestions,
+                    "diagnostics": diagnostics,
+                }
+            except Exception as exc:
+                st.error(
+                    "La correction n’a pas pu aboutir. Vérifiez votre connexion "
+                    "Internet ou réessayez plus tard."
+                )
+                st.caption(f"Détail technique : {type(exc).__name__}")
+
+    report = st.session_state.get("cg_correction_report")
+    corrected_bytes = st.session_state.get("cg_corrected_docx")
+    if report and corrected_bytes:
+        st.divider()
+        st.markdown("#### Résultat de la correction")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Erreurs / points détectés", report["detected"])
+        c2.metric("Corrections appliquées", len(report["applied"]))
+        c3.metric("Suggestions non appliquées", len(report["skipped"]))
+        st.download_button(
+            "Télécharger le Word corrigé (.docx)",
+            data=corrected_bytes,
+            file_name="correctgloss_corrige.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True,
+        )
+        try:
+            pdf_bytes = build_pdf_from_docx(corrected_bytes)
+            st.download_button(
+                "Télécharger le PDF corrigé",
+                data=pdf_bytes,
+                file_name="correctgloss_corrige.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+        except Exception as exc:
+            st.info("L’export PDF n’a pas pu être préparé pour ce document.")
+            st.caption(f"Détail technique : {type(exc).__name__}")
+
+        with st.expander("Voir les corrections appliquées", expanded=True):
+            if report["applied"]:
+                st.dataframe(report["applied"], use_container_width=True, hide_index=True)
+            else:
+                st.info("Aucune correction automatique n’a été appliquée.")
+        with st.expander("Voir les suggestions à vérifier"):
+            if report["skipped"]:
+                st.dataframe(report["skipped"], use_container_width=True, hide_index=True)
+            else:
+                st.write("Aucune suggestion n’a été laissée en attente.")
+        with st.expander("Diagnostic de la structure du document"):
+            diagnostics = report["diagnostics"]
+            st.write(f"Paragraphes analysés : {diagnostics['paragraph_count']}")
+            if diagnostics["repeated_paragraphs"]:
+                st.markdown("**Paragraphes répétés à contrôler**")
+                st.dataframe(diagnostics["repeated_paragraphs"], use_container_width=True, hide_index=True)
+            if diagnostics["suspicious_artefacts"]:
+                st.markdown("**Éléments suspects à vérifier manuellement**")
+                st.dataframe(diagnostics["suspicious_artefacts"], use_container_width=True, hide_index=True)
+            if not diagnostics["repeated_paragraphs"] and not diagnostics["suspicious_artefacts"]:
+                st.success("Aucun problème structurel détecté par les contrôles disponibles.")
 
 with assistant_tab:
     st.subheader("Posez votre question")
