@@ -93,15 +93,16 @@ if results:
 bibliography = st.session_state.get("cg_bibliography", {})
 if bibliography:
     st.divider()
-    st.subheader("Auteurs mentionnés et références bibliographiques")
+    st.subheader("Auteurs déclarés dans les notices et références bibliographiques")
     st.info(bibliography.get("_message", "Résultats issus de catalogues publics."))
     for diagnostic in bibliography.get("_diagnostics", []):
         st.caption(diagnostic)
 
     authors = bibliography.get("Auteurs et chercheurs", [])
-    with st.expander(f"Auteurs mentionnés dans les notices ({len(authors)})", expanded=bool(authors)):
+    with st.expander(f"Auteurs déclarés par les catalogues ({len(authors)})", expanded=bool(authors)):
         if not authors:
-            st.caption("Aucun auteur identifié dans les notices retenues.")
+            st.caption("Aucun nom de personne identifié dans les notices retenues. Les affiliations institutionnelles ne sont pas affichées comme auteurs.")
+        st.caption("Liste dédupliquée à partir des noms de personnes fournis par les catalogues ; les affiliations institutionnelles sont écartées lorsqu’elles sont reconnaissables.")
         for i, item in enumerate(authors, 1):
             st.markdown(f"**{i}. {item.get('name', 'Auteur non renseigné')}**")
             if item.get("publications"):
@@ -199,8 +200,8 @@ if bibliography:
             doc.add_heading("Bibliographie – CORRECTGLOSS", 0)
             doc.add_paragraph("Sujet : " + st.session_state.get("cg_research_query", query))
             export_groups = {
-                "A — Références directes": "A",
-                "B — Références partiellement concordantes": "B",
+                "A — Références centrées sur le girofle malgache": "A",
+                "B — Références sur le girofle ou comparatives": "B",
                 "C — Références contextuelles à vérifier": "C",
             }
             for group_title, group_code in export_groups.items():
