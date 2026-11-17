@@ -483,15 +483,21 @@ def search_bibliography(topic: str, max_results: int = 8):
             }
             quality_hits = title_body & quality_terms
             export_hits = title_body & export_terms
+            competitiveness_terms = {
+                "competitivite", "competitiveness", "competitive",
+                "avantage", "advantage", "positionnement", "positioning"
+            }
+            competitiveness_hits = title_body & competitiveness_terms
             has_clove = bool(title_body & clove_words)
             has_madagascar = madagascar_match
 
-            # A = preuve forte dans le titre : girofle + Madagascar.
-            # Une simple mention de Madagascar dans un résumé comparatif
-            # (ex. étude de la compétitivité indonésienne) ne suffit jamais.
-            if has_clove and madagascar_title_match and quality_hits and export_hits:
+            # A = source centrée sur le girofle malgache ET traitant explicitement
+            # de la qualité ainsi que de la compétitivité. Une simple mention
+            # des exportations ou de la qualité d'huile essentielle ne suffit pas.
+            if (has_clove and madagascar_title_match and quality_hits
+                    and competitiveness_hits and export_hits):
                 relevance_group = "A"
-                relevance_reason = "Forte correspondance : le titre identifie le girofle malgache et la notice contient des éléments sur la qualité et l'exportation/compétitivité. Vérifier le document original."
+                relevance_reason = "Forte correspondance : le titre identifie le girofle malgache et la notice traite explicitement de la qualité et de la compétitivité à l'exportation. Vérifier le document original."
             elif has_clove and (madagascar_match or export_hits):
                 relevance_group = "B"
                 if has_clove and not madagascar_title_match and madagascar_match:
