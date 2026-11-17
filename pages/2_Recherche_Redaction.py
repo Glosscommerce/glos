@@ -109,6 +109,17 @@ if bibliography:
         )
 
     authors = bibliography.get("Auteurs et chercheurs", [])
+    reference_categories = ["Articles scientifiques", "Livres", "Documents, mémoires et thèses"]
+    final_references = [
+        item for category in reference_categories
+        for item in bibliography.get(category, [])
+    ]
+    references_without_author = sum(1 for item in final_references if not item.get("authors"))
+    if references_without_author:
+        st.warning(
+            f"{references_without_author} document(s) n'ont pas d'auteur renseigné dans le catalogue. "
+            "Ils restent visibles dans les références, mais ne figurent pas dans la liste des auteurs."
+        )
     with st.expander(f"Auteurs déclarés par les catalogues ({len(authors)})", expanded=bool(authors)):
         if not authors:
             st.caption("Aucun nom de personne identifié dans les notices retenues. Les affiliations institutionnelles ne sont pas affichées comme auteurs.")
