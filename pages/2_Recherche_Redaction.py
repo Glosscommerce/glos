@@ -98,6 +98,16 @@ if bibliography:
     for diagnostic in bibliography.get("_diagnostics", []):
         st.caption(diagnostic)
 
+    unique_count = bibliography.get("_unique_reference_count")
+    group_counts = bibliography.get("_group_counts", {})
+    if unique_count is not None:
+        st.metric("Documents uniques retenus", unique_count)
+        st.caption(
+            "Répartition : "
+            + " • ".join(f"{group} : {group_counts.get(group, 0)}" for group in ("A", "B", "C"))
+            + ". Les auteurs sont comptés séparément : un même document peut avoir plusieurs auteurs."
+        )
+
     authors = bibliography.get("Auteurs et chercheurs", [])
     with st.expander(f"Auteurs déclarés par les catalogues ({len(authors)})", expanded=bool(authors)):
         if not authors:
