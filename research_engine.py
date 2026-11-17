@@ -536,21 +536,34 @@ def search_bibliography(topic: str, max_results: int = 8):
             }
             competitiveness_hits = title_body & competitiveness_terms
             has_clove = bool(title_body & clove_words)
+            title_has_clove = bool(title_terms & clove_words)
+            abstract_has_clove = bool(abstract_terms & clove_words)
             has_madagascar = madagascar_match
+            abstract_crop_mismatch = (
+                title_has_clove
+                and bool(abstract_terms & other_crop_words)
+                and not abstract_has_clove
+            )
 
-            # A = source centrée sur le girofle malgache ET traitant explicitement
-            # de la qualité ainsi que de la compétitivité. Une simple mention
-            # des exportations ou de la qualité d'huile essentielle ne suffit pas.
-            if (has_clove and madagascar_title_match and quality_hits
+            # A = titre explicitement centré sur le girofle malgache, avec
+            # preuves textuelles de qualité ET compétitivité/exportation.
+            # Les notices dont le résumé contredit le titre sont mises en C.
+            if abstract_crop_mismatch:
+                relevance_group = "C"
+                relevance_reason = "ALERTE de cohérence : le titre mentionne le girofle, mais le résumé semble traiter une autre filière. Ne pas citer avant vérification de la source originale."
+            elif (has_clove and madagascar_title_match and quality_hits
                     and competitiveness_hits and export_hits):
                 relevance_group = "A"
                 relevance_reason = "Forte correspondance : le titre identifie le girofle malgache et la notice traite explicitement de la qualité et de la compétitivité à l'exportation. Vérifier le document original."
-            elif has_clove and (madagascar_match or export_hits):
+            elif title_has_clove and (madagascar_match or export_hits):
                 relevance_group = "B"
-                if has_clove and not madagascar_title_match and madagascar_match:
-                    relevance_reason = "Référence comparative sur le girofle : Madagascar est seulement mentionné dans le résumé, le titre ne présente pas une étude centrée sur le girofle malgache."
+                if not madagascar_title_match and madagascar_match:
+                    relevance_reason = "Référence comparative sur le girofle : Madagascar est mentionné dans le résumé, sans étude centrée sur le girofle malgache."
                 else:
                     relevance_reason = "Référence sur le girofle ou la filière malgache, mais elle ne couvre pas explicitement tous les axes qualité et exportation/compétitivité."
+            elif has_clove and has_madagascar:
+                relevance_group = "C"
+                relevance_reason = "Référence contextuelle sur Madagascar où le girofle apparaît dans le résumé, mais pas comme sujet principal du titre."
             elif has_madagascar and (quality_hits or export_hits):
                 relevance_group = "C"
                 relevance_reason = "Référence contextuelle sur Madagascar et un axe qualité/exportation, sans mention explicite du girofle."
