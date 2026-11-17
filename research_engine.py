@@ -358,6 +358,53 @@ _BIBLIO_CACHE_TTL = 6 * 60 * 60  # 6 heures
 _BIBLIO_CACHE_MAX = 64
 
 
+def _deduplicate_bibliography_references(output):
+    """Conserve une seule notice par document, même si plusieurs catalogues la renvoient."""
+    categories = [
+        "Articles scientifiques", "Livres", "Documents, mémoires et thèses"
+    ]
+    priority = {"A": 3, "B": 2, "C": 1}
+    unique = {}
+    ordered = []
+
+    def reference_key(item):
+        doi = re.sub(r"^https?://doi.org/", "", str(item.get("doi") or "").strip(), flags=re.I).lower()
+        if doi:
+            return "doi:" + doi
+        url = str(item.get("url") or "").strip().lower()
+        if url:
+            parsed = urlparse(url)
+            host = (parsed.netloc or "").removeprefix("www.")
+            path = (parsed.path or "").rstrip("/")
+            if host:
+                return "url:" + host + path
+        return "title:" + _normalise(item.get("title")) + "|" + str(item.get("year") or "")
+
+    for category in categories:
+        retained = []
+        for item in output.get(category, []):
+            key = reference_key(item)
+            if key in unique:
+                existing = unique[key]
+                if priority.get(item.get("relevance_group", "C"), 0) > priority.get(existing.get("relevance_group", "C"), 0):
+                    existing["relevance_group"] = item.get("relevance_group", "C")
+                    existing["relevance_reason"] = item.get("relevance_reason", existing.get("relevance_reason", ""))
+                merged_authors = list(dict.fromkeys((existing.get("authors") or []) + (item.get("authors") or [])))
+                existing["authors"] = merged_authors
+                continue
+            unique[key] = item
+            retained.append(item)
+            ordered.append(item)
+        output[category] = retained
+
+    output["_unique_reference_count"] = len(ordered)
+    output["_group_counts"] = {
+        group: sum(1 for item in ordered if item.get("relevance_group", "C") == group)
+        for group in ("A", "B", "C")
+    }
+    return output
+
+
 def search_bibliography(topic: str, max_results: int = 8):
     """Recherche avec cache mémoire et protection contre les limites temporaires."""
     import requests
@@ -846,6 +893,7 @@ def search_bibliography(topic: str, max_results: int = 8):
                         "type": reference.get("type", "publication"),
                         "relevance_group": reference.get("relevance_group", "C"),
                     })
+    output = _deduplicate_bibliography_references(output)
     output["_diagnostics"] = errors
     output["_message"] = (
         "Certaines bases n'ont pas répondu : " + "; ".join(errors)
