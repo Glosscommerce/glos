@@ -42,6 +42,26 @@ def _terms(value):
             if len(word) > 2 and word not in STOP_WORDS}
 
 
+def _is_person_author(value):
+    """Écarte les affiliations et noms d'organismes parfois indexés comme auteurs."""
+    name = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not name:
+        return False
+    normal = _normalise(name)
+    organization_terms = {
+        "supagro", "universite", "university", "universidad", "universitat",
+        "institution", "institute", "institut", "school", "college",
+        "laboratory", "laboratoire", "department", "departement",
+        "ministry", "ministere", "organisation", "organization",
+        "centre", "center", "cirad",
+    }
+    if "/" in name or ";" in name or "&" in name:
+        return False
+    if set(normal.split()) & organization_terms:
+        return False
+    return True
+
+
 def _relevance(topic, title="", snippet="", url=""):
     """Score thématique tolérant aux formulations différentes, sans survaloriser le domaine."""
     terms = _terms(topic)
@@ -539,10 +559,15 @@ def search_bibliography(topic: str, max_results: int = 8):
             and (title_terms & distinctive_topic_terms)
             and not abstract_has_topic
         )
-        author_list = list(dict.fromkeys(
-            re.sub(r"\s+", " ", str(a or "")).strip()
-            for a in (authors or []) if str(a or "").strip()
-        ))
+        author_list = []
+        author_seen = set()
+        for raw_author in (authors or []):
+            author = re.sub(r"\s+", " ", str(raw_author or "")).strip()
+            author_key = _normalise(author)
+            if not _is_person_author(author) or not author_key or author_key in author_seen:
+                continue
+            author_seen.add(author_key)
+            author_list.append(author)
         missing_fields = []
         if not author_list:
             missing_fields.append("auteur")
